@@ -182,6 +182,18 @@ export const headToHeadQuery = `
           winnerId
           fullRoundText
           displayScore
+          slots {
+            entrant {
+              id
+              name
+              participants {
+                player {
+                  id
+                  gamerTag
+                }
+              }
+            }
+          }
           event {
             name
             videogame {

@@ -40,7 +40,22 @@ export function HeadToHead({ player1Id, player2Id, videogameId }: HeadToHeadProp
   if (!data?.player1 || !data.player2) return null;
 
   const { player1, player2 } = data;
+  const selectedPlayerIds = new Set([player1Id, player2Id]);
   const setNodes = [...(player1.sets?.nodes ?? [])]
+    .filter((set) => {
+      const participantPlayerIds = new Set(
+        (set.slots ?? [])
+          .flatMap((slot) => slot.entrant?.participants ?? [])
+          .map((participant) => participant.player?.id)
+          .filter((playerId): playerId is string => Boolean(playerId))
+      );
+
+      if (participantPlayerIds.size !== 2) {
+        return false;
+      }
+
+      return [...participantPlayerIds].every((playerId) => selectedPlayerIds.has(playerId));
+    })
     .filter((set) => set.event.videogame?.id === videogameId)
     .sort((a, b) => b.event.tournament.startAt - a.event.tournament.startAt);
 

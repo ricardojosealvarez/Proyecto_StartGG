@@ -84,6 +84,18 @@ export interface HeadToHeadSet {
   winnerId: string | number | null;
   displayScore?: string | null;
   fullRoundText?: string | null;
+  slots?: Array<{
+    entrant?: {
+      id: string;
+      name?: string | null;
+      participants?: Array<{
+        player?: {
+          id: string;
+          gamerTag?: string | null;
+        } | null;
+      }> | null;
+    } | null;
+  }> | null;
   event: {
     name: string;
     videogame?: {
