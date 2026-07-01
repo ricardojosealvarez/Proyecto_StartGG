@@ -116,7 +116,7 @@ function App() {
               <p className="mt-2 text-sm text-cyan-100">
                 La API alpha actual no permite buscar por gamerTag de forma oficial, así que esta
                 versión combina resolución oficial por `playerId`/`user slug` con búsqueda por
-                nombre apoyada en perfiles públicos de Start.gg.
+                nombre a partir de jugadores detectados en torneos Smash recientes.
               </p>
             </div>
           </section>

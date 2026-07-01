@@ -19,14 +19,9 @@ export interface PlayerSummary {
   user?: PlayerUser | null;
 }
 
-export interface PlayerSearchCandidate {
-  slug: string;
-  url: string;
-}
-
 export interface PlayerSearchResponse {
   query: string;
-  candidates: PlayerSearchCandidate[];
+  players: PlayerSummary[];
 }
 
 export interface ResolvePlayerResponse {

@@ -114,7 +114,6 @@ export async function resolvePlayerByUserSlug(slug: string) {
 }
 
 export async function searchPlayersByName(query: string) {
-  const normalizedQuery = query.trim().toLowerCase();
   const response = await fetch(`/api/player-search?q=${encodeURIComponent(query)}`);
 
   if (!response.ok) {
@@ -133,49 +132,10 @@ export async function searchPlayersByName(query: string) {
   }
 
   const payload = (await response.json()) as PlayerSearchResponse;
-  const resolvedPlayers = await Promise.all(
-    payload.candidates.map(async (candidate) => {
-      try {
-        return await resolvePlayerByUserSlug(candidate.slug);
-      } catch {
-        return null;
-      }
-    })
-  );
-
-  const seenPlayerIds = new Set<string>();
-
-  return resolvedPlayers
-    .filter((player): player is PlayerSummary => {
-      if (!player || seenPlayerIds.has(player.id)) {
-        return false;
-      }
-
-      seenPlayerIds.add(player.id);
-      return true;
-    })
-    .sort((playerA, playerB) => {
-      const playerATag = playerA.gamerTag.toLowerCase();
-      const playerBTag = playerB.gamerTag.toLowerCase();
-      const playerAExact = playerATag === normalizedQuery ? 1 : 0;
-      const playerBExact = playerBTag === normalizedQuery ? 1 : 0;
-
-      if (playerAExact !== playerBExact) {
-        return playerBExact - playerAExact;
-      }
-
-      const playerAStartsWith = playerATag.startsWith(normalizedQuery) ? 1 : 0;
-      const playerBStartsWith = playerBTag.startsWith(normalizedQuery) ? 1 : 0;
-
-      if (playerAStartsWith !== playerBStartsWith) {
-        return playerBStartsWith - playerAStartsWith;
-      }
-
-      const playerAIncludes = playerATag.includes(normalizedQuery) ? 1 : 0;
-      const playerBIncludes = playerBTag.includes(normalizedQuery) ? 1 : 0;
-
-      return playerBIncludes - playerAIncludes;
-    });
+  return payload.players.map((player) => ({
+    ...player,
+    id: String(player.id),
+  }));
 }
 
 export const resolvePlayerByIdQuery = `
