@@ -1,19 +1,15 @@
-import { useState } from 'react';
+import { useDeferredValue, useState } from 'react';
 import { Clock3, Loader2, Search, UserCircle2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import {
   currentUserPlayerQuery,
-  getStartggErrorMessage,
+  getPlayerSearchErrorMessage,
   requestStartgg,
   resolvePlayerByIdQuery,
-  resolvePlayerByUserSlugQuery,
+  resolvePlayerByUserSlug,
+  searchPlayersByName,
 } from '../lib/api';
-import {
-  CurrentUserResponse,
-  PlayerSummary,
-  ResolvePlayerResponse,
-  ResolveUserResponse,
-} from '../lib/types';
+import { CurrentUserResponse, PlayerSummary, ResolvePlayerResponse } from '../lib/types';
 
 interface PlayerSearchProps {
   label?: string;
@@ -53,41 +49,56 @@ export function PlayerSearch({
   recentPlayers = [],
 }: PlayerSearchProps) {
   const [search, setSearch] = useState('');
-  const normalizedLookupValue = normalizeLookupValue(search);
+  const deferredSearch = useDeferredValue(search);
+  const normalizedLookupValue = normalizeLookupValue(deferredSearch);
   const lookupIsPlayerId = isNumericPlayerId(normalizedLookupValue);
   const lookupIsUserSlug = isUserSlug(normalizedLookupValue);
+  const directLookupEnabled =
+    normalizedLookupValue.length > 0 && (lookupIsPlayerId || lookupIsUserSlug);
+  const playerNameSearchEnabled =
+    normalizedLookupValue.length >= 2 && !directLookupEnabled;
 
-  const { data, error, isFetching } = useQuery<PlayerSummary | null>({
+  const {
+    data: directLookupResult,
+    error: directLookupError,
+    isFetching: isFetchingDirectLookup,
+  } = useQuery<PlayerSummary | null>({
     queryKey: ['playerLookup', normalizedLookupValue],
     queryFn: async () => {
-      if (!normalizedLookupValue) return null;
+      const response = await requestStartgg<ResolvePlayerResponse>(resolvePlayerByIdQuery, {
+        playerId: normalizedLookupValue,
+      });
 
-      if (lookupIsPlayerId) {
-        const response = await requestStartgg<ResolvePlayerResponse>(resolvePlayerByIdQuery, {
-          playerId: normalizedLookupValue,
-        });
-        return response.player;
+      if (!response.player) {
+        return null;
       }
 
-      const response = await requestStartgg<ResolveUserResponse>(
-        resolvePlayerByUserSlugQuery,
-        {
-          slug: normalizedLookupValue,
-        }
-      );
-
-      if (!response.user?.player) return null;
-
       return {
-        ...response.user.player,
-        user: {
-          bio: response.user.bio ?? null,
-          images: response.user.images ?? null,
-          slug: response.user.slug ?? normalizedLookupValue,
-        },
+        ...response.player,
+        id: String(response.player.id),
       };
     },
-    enabled: normalizedLookupValue.length > 0,
+    enabled: directLookupEnabled && lookupIsPlayerId,
+  });
+
+  const {
+    data: directUserSlugResult,
+    error: directUserSlugError,
+    isFetching: isFetchingDirectUserSlug,
+  } = useQuery<PlayerSummary | null>({
+    queryKey: ['playerLookupByUserSlug', normalizedLookupValue],
+    queryFn: () => resolvePlayerByUserSlug(normalizedLookupValue),
+    enabled: directLookupEnabled && lookupIsUserSlug,
+  });
+
+  const {
+    data: playerNameResults = [],
+    error: playerNameSearchError,
+    isFetching: isFetchingPlayerNameSearch,
+  } = useQuery<PlayerSummary[]>({
+    queryKey: ['playerSearchByName', normalizedLookupValue],
+    queryFn: () => searchPlayersByName(normalizedLookupValue),
+    enabled: playerNameSearchEnabled,
   });
 
   const {
@@ -98,6 +109,10 @@ export function PlayerSearch({
     queryFn: () => requestStartgg<CurrentUserResponse>(currentUserPlayerQuery),
     enabled: false,
   });
+
+  const directResult = directLookupResult ?? directUserSlugResult ?? null;
+  const directError = directLookupError ?? directUserSlugError ?? null;
+  const isFetchingDirectResult = isFetchingDirectLookup || isFetchingDirectUserSlug;
 
   const lookupTypeLabel = lookupIsPlayerId
     ? 'Detectado como playerId'
@@ -116,8 +131,8 @@ export function PlayerSearch({
       <div className="relative">
         <input
           type="text"
-          className="w-full px-4 py-2 pl-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Player ID o user slug de Start.gg"
+          className="w-full rounded-lg border px-4 py-2 pl-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Nombre, player ID o user slug de Start.gg"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -216,56 +231,108 @@ export function PlayerSearch({
 
       <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
         <div>Formatos válidos:</div>
+        <div className="mt-1 text-xs text-slate-700">MkLeo</div>
         <div className="mt-1 font-mono text-xs text-slate-700">2724258</div>
         <div className="mt-1 font-mono text-xs text-slate-700">user/e4bc09eb</div>
         <div className="mt-1 font-mono text-xs text-slate-700">https://start.gg/user/e4bc09eb</div>
       </div>
 
-      {isFetching && (
-        <div className="mt-2 text-center text-gray-600">Resolviendo jugador...</div>
-      )}
-
-      {error && (
-        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {getStartggErrorMessage(error)}
+      {(isFetchingDirectResult || isFetchingPlayerNameSearch) && (
+        <div className="mt-2 text-center text-gray-600">
+          {directLookupEnabled ? 'Resolviendo jugador...' : 'Buscando jugadores...'}
         </div>
       )}
 
-      {data && (
-        <div className="mt-2 bg-white rounded-lg shadow-lg">
+      {directError && (
+        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {getPlayerSearchErrorMessage(directError)}
+        </div>
+      )}
+
+      {playerNameSearchError && (
+        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {getPlayerSearchErrorMessage(playerNameSearchError)}
+        </div>
+      )}
+
+      {directResult && (
+        <div className="mt-2 rounded-lg bg-white shadow-lg">
           <button
-            className="w-full px-4 py-3 text-left hover:bg-gray-100 flex items-center gap-3"
+            className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-100"
             onClick={() => {
               onPlayerSelect({
-                ...data,
-                id: String(data.id),
+                ...directResult,
+                id: String(directResult.id),
               });
-              setSearch(data.user?.slug ?? data.gamerTag);
+              setSearch(directResult.user?.slug ?? directResult.gamerTag);
             }}
           >
-            {data.user?.images?.[0]?.url && (
+            {directResult.user?.images?.[0]?.url && (
               <img
-                src={data.user.images[0].url}
-                alt={data.gamerTag}
-                className="w-10 h-10 rounded-full"
+                src={directResult.user.images[0].url}
+                alt={directResult.gamerTag}
+                className="h-10 w-10 rounded-full"
               />
             )}
             <div>
-              <div className="font-medium">{data.gamerTag}</div>
+              <div className="font-medium">{directResult.gamerTag}</div>
               <div className="text-sm text-gray-600">
-                Player ID: {data.id}
-                {data.user?.slug ? ` · ${data.user.slug}` : ''}
+                Player ID: {directResult.id}
+                {directResult.user?.slug ? ` · ${directResult.user.slug}` : ''}
               </div>
             </div>
           </button>
         </div>
       )}
 
-      {normalizedLookupValue.length > 0 && !isFetching && !error && !data && (
-        <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-          No encontré un jugador para ese `playerId` o `user slug`.
+      {playerNameResults.length > 0 && (
+        <div className="mt-2 overflow-hidden rounded-lg bg-white shadow-lg">
+          {playerNameResults.map((player) => (
+            <button
+              key={player.id}
+              className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-gray-100 last:border-b-0"
+              onClick={() => {
+                onPlayerSelect(player);
+                setSearch(player.user?.slug ?? player.gamerTag);
+              }}
+            >
+              {player.user?.images?.[0]?.url && (
+                <img
+                  src={player.user.images[0].url}
+                  alt={player.gamerTag}
+                  className="h-10 w-10 rounded-full"
+                />
+              )}
+              <div>
+                <div className="font-medium">{player.gamerTag}</div>
+                <div className="text-sm text-gray-600">
+                  Player ID: {player.id}
+                  {player.user?.slug ? ` · ${player.user.slug}` : ''}
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       )}
+
+      {directLookupEnabled &&
+        !isFetchingDirectResult &&
+        !directError &&
+        !directResult && (
+          <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+            No encontré un jugador para ese `playerId` o `user slug`.
+          </div>
+        )}
+
+      {playerNameSearchEnabled &&
+        !isFetchingPlayerNameSearch &&
+        !playerNameSearchError &&
+        playerNameResults.length === 0 && (
+          <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+            No encontré perfiles de Start.gg para ese nombre. Prueba con más caracteres o con el
+            `playerId`/`user slug` si ya lo conoces.
+          </div>
+        )}
     </div>
   );
 }

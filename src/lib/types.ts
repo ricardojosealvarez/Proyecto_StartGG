@@ -19,6 +19,16 @@ export interface PlayerSummary {
   user?: PlayerUser | null;
 }
 
+export interface PlayerSearchCandidate {
+  slug: string;
+  url: string;
+}
+
+export interface PlayerSearchResponse {
+  query: string;
+  candidates: PlayerSearchCandidate[];
+}
+
 export interface ResolvePlayerResponse {
   player: PlayerSummary | null;
 }

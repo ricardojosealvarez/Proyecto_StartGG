@@ -1,4 +1,5 @@
 import { ClientError, GraphQLClient } from 'graphql-request';
+import { PlayerSearchResponse, PlayerSummary, ResolveUserResponse } from './types';
 
 const API_ENDPOINT = 'https://api.start.gg/gql/alpha';
 const API_KEY = import.meta.env.VITE_STARTGG_API_KEY;
@@ -34,6 +35,18 @@ export function getStartggErrorMessage(error: unknown) {
   }
 
   return 'No pude completar la consulta en Start.gg.';
+}
+
+export function getPlayerSearchErrorMessage(error: unknown) {
+  if (error instanceof StartggApiError) {
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'No pude buscar jugadores por nombre.';
 }
 
 export async function requestStartgg<TResponse>(
@@ -74,6 +87,95 @@ export async function requestStartgg<TResponse>(
 
     throw new StartggApiError('unknown', 'Error inesperado al consultar Start.gg.');
   }
+}
+
+function mapResolvedUserToPlayer(response: ResolveUserResponse, fallbackSlug: string) {
+  if (!response.user?.player) {
+    return null;
+  }
+
+  return {
+    ...response.user.player,
+    id: String(response.user.player.id),
+    user: {
+      bio: response.user.bio ?? null,
+      images: response.user.images ?? null,
+      slug: response.user.slug ?? fallbackSlug,
+    },
+  } satisfies PlayerSummary;
+}
+
+export async function resolvePlayerByUserSlug(slug: string) {
+  const response = await requestStartgg<ResolveUserResponse>(resolvePlayerByUserSlugQuery, {
+    slug,
+  });
+
+  return mapResolvedUserToPlayer(response, slug);
+}
+
+export async function searchPlayersByName(query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const response = await fetch(`/api/player-search?q=${encodeURIComponent(query)}`);
+
+  if (!response.ok) {
+    let errorMessage = 'No pude buscar jugadores por nombre.';
+
+    try {
+      const errorPayload = await response.json();
+      if (typeof errorPayload?.error === 'string') {
+        errorMessage = errorPayload.error;
+      }
+    } catch {
+      // Ignore invalid JSON and keep the generic message.
+    }
+
+    throw new Error(errorMessage);
+  }
+
+  const payload = (await response.json()) as PlayerSearchResponse;
+  const resolvedPlayers = await Promise.all(
+    payload.candidates.map(async (candidate) => {
+      try {
+        return await resolvePlayerByUserSlug(candidate.slug);
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const seenPlayerIds = new Set<string>();
+
+  return resolvedPlayers
+    .filter((player): player is PlayerSummary => {
+      if (!player || seenPlayerIds.has(player.id)) {
+        return false;
+      }
+
+      seenPlayerIds.add(player.id);
+      return true;
+    })
+    .sort((playerA, playerB) => {
+      const playerATag = playerA.gamerTag.toLowerCase();
+      const playerBTag = playerB.gamerTag.toLowerCase();
+      const playerAExact = playerATag === normalizedQuery ? 1 : 0;
+      const playerBExact = playerBTag === normalizedQuery ? 1 : 0;
+
+      if (playerAExact !== playerBExact) {
+        return playerBExact - playerAExact;
+      }
+
+      const playerAStartsWith = playerATag.startsWith(normalizedQuery) ? 1 : 0;
+      const playerBStartsWith = playerBTag.startsWith(normalizedQuery) ? 1 : 0;
+
+      if (playerAStartsWith !== playerBStartsWith) {
+        return playerBStartsWith - playerAStartsWith;
+      }
+
+      const playerAIncludes = playerATag.includes(normalizedQuery) ? 1 : 0;
+      const playerBIncludes = playerBTag.includes(normalizedQuery) ? 1 : 0;
+
+      return playerBIncludes - playerAIncludes;
+    });
 }
 
 export const resolvePlayerByIdQuery = `

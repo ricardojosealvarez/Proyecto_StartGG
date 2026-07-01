@@ -114,8 +114,9 @@ function App() {
                 sets, y añade filtro explícito por juego de Smash.
               </p>
               <p className="mt-2 text-sm text-cyan-100">
-                La API alpha actual no permite buscar por gamerTag, así que esta versión resuelve
-                jugadores por `playerId` o por `user slug` de Start.gg.
+                La API alpha actual no permite buscar por gamerTag de forma oficial, así que esta
+                versión combina resolución oficial por `playerId`/`user slug` con búsqueda por
+                nombre apoyada en perfiles públicos de Start.gg.
               </p>
             </div>
           </section>
@@ -150,8 +151,8 @@ function App() {
           <section className="mb-8 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
             <div className="text-sm font-semibold text-slate-800">Cómo resolver jugadores</div>
             <div className="mt-2 text-sm text-slate-600">
-              Esta versión usa la API alpha actual de Start.gg, así que la entrada debe ser un
-              `playerId`, un `user slug` o la URL completa del perfil. Si la key pertenece a tu
+              Puedes escribir el nombre del jugador para ver candidatos, o bien usar directamente
+              su `playerId`, `user slug` o la URL completa del perfil. Si la key pertenece a tu
               cuenta, también puedes usar el botón `Usar mi perfil`.
             </div>
           </section>
@@ -178,7 +179,7 @@ function App() {
                 <div>
                   <h3 className="text-lg font-medium mb-4">Jugador 1</h3>
                   <PlayerSearch
-                    label="Player ID o user slug"
+                    label="Nombre, player ID o user slug"
                     selectedPlayer={selectedPlayer1}
                     onPlayerSelect={handlePlayer1Select}
                     onClearSelection={() => setSelectedPlayer1(null)}
@@ -188,7 +189,7 @@ function App() {
                 <div>
                   <h3 className="text-lg font-medium mb-4">Jugador 2</h3>
                   <PlayerSearch
-                    label="Player ID o user slug"
+                    label="Nombre, player ID o user slug"
                     selectedPlayer={selectedPlayer2}
                     onPlayerSelect={handlePlayer2Select}
                     onClearSelection={() => setSelectedPlayer2(null)}
