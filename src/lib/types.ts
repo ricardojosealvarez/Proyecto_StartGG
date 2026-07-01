@@ -10,26 +10,46 @@ export interface PlayerImage {
 export interface PlayerUser {
   bio?: string | null;
   images?: PlayerImage[] | null;
+  slug?: string | null;
 }
 
 export interface PlayerSummary {
   id: string;
   gamerTag: string;
   user?: PlayerUser | null;
-  rankings?: Ranking[] | null;
 }
 
-export interface SearchPlayersResponse {
-  players: {
-    nodes: PlayerSummary[];
-  };
+export interface ResolvePlayerResponse {
+  player: PlayerSummary | null;
 }
 
-export interface PlayerResult {
+export interface ResolveUserResponse {
+  user: {
+    player: PlayerSummary | null;
+    images?: PlayerImage[] | null;
+    bio?: string | null;
+    slug?: string | null;
+  } | null;
+}
+
+export interface CurrentUserResponse {
+  currentUser: {
+    slug?: string | null;
+    bio?: string | null;
+    images?: PlayerImage[] | null;
+    player: PlayerSummary | null;
+  } | null;
+}
+
+export interface RecentStanding {
   placement: number;
   entrant: {
     event: {
       name: string;
+      videogame?: {
+        id: number;
+        displayName: string;
+      } | null;
       tournament: {
         name: string;
         startAt: number;
@@ -39,12 +59,11 @@ export interface PlayerResult {
 }
 
 export interface PlayerDetails {
+  id: string;
   gamerTag: string;
   user?: PlayerUser | null;
   rankings?: Ranking[] | null;
-  results?: {
-    nodes: PlayerResult[];
-  } | null;
+  recentStandings?: RecentStanding[] | null;
 }
 
 export interface PlayerStatsResponse {
@@ -52,15 +71,25 @@ export interface PlayerStatsResponse {
 }
 
 export interface HeadToHeadPlayer {
+  id: string;
   gamerTag: string;
   user?: PlayerUser | null;
+  sets?: {
+    nodes: HeadToHeadSet[];
+  } | null;
 }
 
 export interface HeadToHeadSet {
+  id: string;
   winnerId: string | number | null;
   displayScore?: string | null;
+  fullRoundText?: string | null;
   event: {
     name: string;
+    videogame?: {
+      id: number;
+      displayName: string;
+    } | null;
     tournament: {
       name: string;
       startAt: number;
@@ -71,7 +100,4 @@ export interface HeadToHeadSet {
 export interface HeadToHeadResponse {
   player1: HeadToHeadPlayer | null;
   player2: HeadToHeadPlayer | null;
-  sets: {
-    nodes: HeadToHeadSet[];
-  };
 }

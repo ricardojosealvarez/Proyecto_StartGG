@@ -1,18 +1,25 @@
 import { useQuery } from '@tanstack/react-query';
-import { client, headToHeadQuery } from '../lib/api';
+import {
+  getStartggErrorMessage,
+  headToHeadQuery,
+  requestStartgg,
+} from '../lib/api';
 import { Swords } from 'lucide-react';
 import { formatEventDate } from '../lib/format';
+import { getSmashGameLabel } from '../lib/smash';
 import { HeadToHeadResponse } from '../lib/types';
+import { SummaryCard } from './SummaryCard';
 
 interface HeadToHeadProps {
   player1Id: string;
   player2Id: string;
+  videogameId: number;
 }
 
-export function HeadToHead({ player1Id, player2Id }: HeadToHeadProps) {
+export function HeadToHead({ player1Id, player2Id, videogameId }: HeadToHeadProps) {
   const { data, error, isLoading } = useQuery<HeadToHeadResponse>({
-    queryKey: ['headToHead', player1Id, player2Id],
-    queryFn: () => client.request<HeadToHeadResponse>(headToHeadQuery, { player1Id, player2Id }),
+    queryKey: ['headToHead', player1Id, player2Id, videogameId],
+    queryFn: () => requestStartgg<HeadToHeadResponse>(headToHeadQuery, { player1Id, player2Id }),
   });
 
   if (player1Id === player2Id) {
@@ -26,14 +33,16 @@ export function HeadToHead({ player1Id, player2Id }: HeadToHeadProps) {
   if (error) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-        No pude cargar el head-to-head desde Start.gg.
+        {getStartggErrorMessage(error)}
       </div>
     );
   }
-  if (!data) return null;
+  if (!data?.player1 || !data.player2) return null;
 
-  const { player1, player2, sets } = data;
-  const setNodes = sets?.nodes ?? [];
+  const { player1, player2 } = data;
+  const setNodes = [...(player1.sets?.nodes ?? [])]
+    .filter((set) => set.event.videogame?.id === videogameId)
+    .sort((a, b) => b.event.tournament.startAt - a.event.tournament.startAt);
 
   const results = setNodes.reduce(
     (acc: { player1Wins: number; player2Wins: number }, set) => {
@@ -44,7 +53,13 @@ export function HeadToHead({ player1Id, player2Id }: HeadToHeadProps) {
     { player1Wins: 0, player2Wins: 0 }
   );
 
-  if (!player1 || !player2) return null;
+  const totalSets = setNodes.length;
+  const advantageLabel =
+    results.player1Wins === results.player2Wins
+      ? 'Empate'
+      : results.player1Wins > results.player2Wins
+        ? player1.gamerTag
+        : player2.gamerTag;
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
@@ -79,18 +94,36 @@ export function HeadToHead({ player1Id, player2Id }: HeadToHeadProps) {
           {results.player1Wins} - {results.player2Wins}
         </div>
         <div className="text-gray-600">Historial de enfrentamientos</div>
+        <div className="mt-1 text-sm text-blue-700">
+          Filtrado para {getSmashGameLabel(videogameId)}
+        </div>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <SummaryCard label="Sets visibles" value={totalSets} />
+        <SummaryCard label="Ventaja" value={advantageLabel} tone="accent" />
+        <SummaryCard
+          label="Último score"
+          value={setNodes[0]?.displayScore ?? 'N/D'}
+          tone="success"
+        />
       </div>
 
       {setNodes.length > 0 ? (
         <div className="space-y-3">
-          {setNodes.map((set, index) => (
+          {setNodes.map((set) => (
             <div
-              key={`${set.event.tournament.name}-${set.event.name}-${index}`}
+              key={set.id}
               className="bg-gray-50 p-4 rounded-lg"
             >
               <div className="flex justify-between items-center gap-4">
-                <div className="font-medium">
-                  {set.event.tournament.name} - {set.event.name}
+                <div>
+                  <div className="font-medium">
+                    {set.event.tournament.name} - {set.event.name}
+                  </div>
+                  {set.fullRoundText && (
+                    <div className="text-sm text-gray-500">{set.fullRoundText}</div>
+                  )}
                 </div>
                 <div className="text-lg font-bold">{set.displayScore ?? 'Sin score visible'}</div>
               </div>
@@ -102,7 +135,7 @@ export function HeadToHead({ player1Id, player2Id }: HeadToHeadProps) {
         </div>
       ) : (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
-          No hay sets visibles entre estos jugadores en la consulta actual.
+          No hay sets visibles entre estos jugadores para {getSmashGameLabel(videogameId)}.
         </div>
       )}
     </div>
