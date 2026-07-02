@@ -4,7 +4,7 @@ import { ArrowLeftRight, GamepadIcon } from 'lucide-react';
 import { HeadToHead } from './components/HeadToHead';
 import { PlayerSearch } from './components/PlayerSearch';
 import { PlayerStats } from './components/PlayerStats';
-import { hasConfiguredApiKey } from './lib/api';
+import { hasConfiguredApiKey, normalizeStartggUserSlug } from './lib/api';
 import { DEFAULT_SMASH_GAME_ID, SMASH_GAMES } from './lib/smash';
 import { PlayerSummary } from './lib/types';
 
@@ -20,7 +20,17 @@ function readRecentPlayers() {
     if (!storedValue) return [];
 
     const parsedValue = JSON.parse(storedValue) as PlayerSummary[];
-    return Array.isArray(parsedValue) ? parsedValue : [];
+    return Array.isArray(parsedValue)
+      ? parsedValue.map((player) => ({
+          ...player,
+          user: player.user
+            ? {
+                ...player.user,
+                slug: normalizeStartggUserSlug(player.user.slug),
+              }
+            : player.user,
+        }))
+      : [];
   } catch {
     return [];
   }

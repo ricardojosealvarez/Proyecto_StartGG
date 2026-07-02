@@ -49,6 +49,24 @@ export function getPlayerSearchErrorMessage(error: unknown) {
   return 'No pude buscar jugadores por nombre.';
 }
 
+export function normalizeStartggUserSlug(slug?: string | null) {
+  if (!slug) return null;
+
+  const trimmedSlug = slug.trim();
+  if (!trimmedSlug) return null;
+
+  if (trimmedSlug.includes('start.gg/user/')) {
+    const normalizedFromUrl = trimmedSlug.split('start.gg/')[1]?.trim();
+    return normalizedFromUrl ? normalizeStartggUserSlug(normalizedFromUrl) : null;
+  }
+
+  if (trimmedSlug.startsWith('user/')) {
+    return trimmedSlug;
+  }
+
+  return `user/${trimmedSlug.replace(/^\/+/, '')}`;
+}
+
 export async function requestStartgg<TResponse>(
   query: string,
   variables?: Record<string, unknown>
@@ -100,17 +118,18 @@ function mapResolvedUserToPlayer(response: ResolveUserResponse, fallbackSlug: st
     user: {
       bio: response.user.bio ?? null,
       images: response.user.images ?? null,
-      slug: response.user.slug ?? fallbackSlug,
+      slug: normalizeStartggUserSlug(response.user.slug ?? fallbackSlug),
     },
   } satisfies PlayerSummary;
 }
 
 export async function resolvePlayerByUserSlug(slug: string) {
+  const normalizedSlug = normalizeStartggUserSlug(slug) ?? slug;
   const response = await requestStartgg<ResolveUserResponse>(resolvePlayerByUserSlugQuery, {
-    slug,
+    slug: normalizedSlug,
   });
 
-  return mapResolvedUserToPlayer(response, slug);
+  return mapResolvedUserToPlayer(response, normalizedSlug);
 }
 
 export async function searchPlayersByName(query: string) {
@@ -135,6 +154,12 @@ export async function searchPlayersByName(query: string) {
   return payload.players.map((player) => ({
     ...player,
     id: String(player.id),
+    user: player.user
+      ? {
+          ...player.user,
+          slug: normalizeStartggUserSlug(player.user.slug),
+        }
+      : player.user,
   }));
 }
 

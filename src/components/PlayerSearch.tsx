@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   currentUserPlayerQuery,
   getPlayerSearchErrorMessage,
+  normalizeStartggUserSlug,
   requestStartgg,
   resolvePlayerByIdQuery,
   resolvePlayerByUserSlug,
@@ -76,6 +77,12 @@ export function PlayerSearch({
       return {
         ...response.player,
         id: String(response.player.id),
+        user: response.player.user
+          ? {
+              ...response.player.user,
+              slug: normalizeStartggUserSlug(response.player.user.slug),
+            }
+          : response.player.user,
       };
     },
     enabled: directLookupEnabled && lookupIsPlayerId,
@@ -155,7 +162,7 @@ export function PlayerSearch({
               user: {
                 bio: currentUser.bio ?? null,
                 images: currentUser.images ?? null,
-                slug: currentUser.slug ?? null,
+                slug: normalizeStartggUserSlug(currentUser.slug),
               },
             };
 
@@ -163,7 +170,7 @@ export function PlayerSearch({
               ...resolvedPlayer,
               id: String(resolvedPlayer.id),
             });
-            setSearch(currentUser.slug ?? String(currentUser.player.id));
+            setSearch(normalizeStartggUserSlug(currentUser.slug) ?? String(currentUser.player.id));
           }}
           className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
         >
