@@ -4,9 +4,9 @@ import react from '@vitejs/plugin-react';
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const ERROR_CACHE_TTL_MS = 2 * 60 * 1000;
 const SMASH_GAME_IDS = [1386, 1, 5, 3, 4];
-const TOURNAMENT_PAGES_PER_GAME = 5;
-const TOURNAMENTS_PER_GAME = 10;
-const STANDINGS_PER_EVENT = 96;
+const TOURNAMENT_PAGES_PER_GAME = 6;
+const TOURNAMENTS_PER_GAME = 4;
+const ENTRANTS_PER_EVENT = 64;
 const STARTGG_ALPHA_URL = 'https://api.start.gg/gql/alpha';
 const REQUEST_DELAY_MS = 250;
 const MAX_REQUEST_RETRIES = 2;
@@ -112,7 +112,7 @@ async function fetchRecentSmashPlayers(apiKey: string) {
       $videogameId: ID!
       $page: Int!
       $perPage: Int!
-      $standingsPerEvent: Int!
+      $entrantsPerEvent: Int!
     ) {
       tournaments(
         query: {
@@ -126,23 +126,18 @@ async function fetchRecentSmashPlayers(apiKey: string) {
         }
       ) {
         nodes {
-          id
-          name
           events {
-            id
-            name
             videogame {
               id
             }
-            standings(query: { page: 1, perPage: $standingsPerEvent }) {
+            entrants(query: { page: 1, perPage: $entrantsPerEvent }) {
               nodes {
-                player {
-                  id
-                  gamerTag
-                  user {
-                    slug
-                    images {
-                      url
+                participants {
+                  player {
+                    id
+                    gamerTag
+                    user {
+                      slug
                     }
                   }
                 }
@@ -159,9 +154,11 @@ async function fetchRecentSmashPlayers(apiKey: string) {
       nodes: Array<{
         events?: Array<{
           videogame?: { id: number } | null;
-          standings?: {
+          entrants?: {
             nodes?: Array<{
-              player?: SearchPlayer | null;
+              participants?: Array<{
+                player?: SearchPlayer | null;
+              }> | null;
             }> | null;
           } | null;
         }> | null;
@@ -178,9 +175,11 @@ async function fetchRecentSmashPlayers(apiKey: string) {
             nodes: Array<{
               events?: Array<{
                 videogame?: { id: number } | null;
-                standings?: {
+                entrants?: {
                   nodes?: Array<{
-                    player?: SearchPlayer | null;
+                    participants?: Array<{
+                      player?: SearchPlayer | null;
+                    }> | null;
                   }> | null;
                 } | null;
               }> | null;
@@ -190,7 +189,7 @@ async function fetchRecentSmashPlayers(apiKey: string) {
           videogameId,
           page,
           perPage: TOURNAMENTS_PER_GAME,
-          standingsPerEvent: STANDINGS_PER_EVENT,
+          entrantsPerEvent: ENTRANTS_PER_EVENT,
         });
 
         results.push(result);
@@ -218,17 +217,19 @@ async function fetchRecentSmashPlayers(apiKey: string) {
   for (const result of results) {
     for (const tournament of result.tournaments.nodes ?? []) {
       for (const event of tournament.events ?? []) {
-        for (const standing of event.standings?.nodes ?? []) {
-          const player = standing.player;
+        for (const entrant of event.entrants?.nodes ?? []) {
+          for (const participant of entrant.participants ?? []) {
+            const player = participant.player;
 
-          if (!player?.id || !player.gamerTag) {
-            continue;
+            if (!player?.id || !player.gamerTag) {
+              continue;
+            }
+
+            playersById.set(String(player.id), {
+              ...player,
+              id: String(player.id),
+            });
           }
-
-          playersById.set(String(player.id), {
-            ...player,
-            id: String(player.id),
-          });
         }
       }
     }
