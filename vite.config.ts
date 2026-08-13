@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { playerPredictionProxy } from './server/predictions/predictionPlugin.ts';
 
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const ERROR_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -379,7 +380,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    plugins: [react(), playerSearchProxy(env.VITE_STARTGG_API_KEY)],
+    plugins: [
+      react(),
+      playerSearchProxy(env.VITE_STARTGG_API_KEY),
+      playerPredictionProxy(env.DATABASE_URL),
+    ],
     optimizeDeps: {
       exclude: ['lucide-react'],
     },

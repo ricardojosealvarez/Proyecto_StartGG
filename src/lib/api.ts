@@ -49,7 +49,7 @@ export function getPlayerSearchErrorMessage(error: unknown) {
   return 'No pude buscar jugadores por nombre.';
 }
 
-export function normalizeStartggUserSlug(slug?: string | null) {
+export function normalizeStartggUserSlug(slug?: string | null): string | null {
   if (!slug) return null;
 
   const trimmedSlug = slug.trim();

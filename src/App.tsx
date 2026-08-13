@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ArrowLeftRight, GamepadIcon } from 'lucide-react';
 import { HeadToHead } from './components/HeadToHead';
 import { PlayerSearch } from './components/PlayerSearch';
+import { PlayerPrediction } from './components/PlayerPrediction';
 import { PlayerStats } from './components/PlayerStats';
 import { hasConfiguredApiKey, normalizeStartggUserSlug } from './lib/api';
 import { DEFAULT_SMASH_GAME_ID, SMASH_GAMES } from './lib/smash';
@@ -36,10 +37,7 @@ function readRecentPlayers() {
   }
 }
 
-function mergeRecentPlayers(
-  currentPlayers: PlayerSummary[],
-  nextPlayer: PlayerSummary | null
-) {
+function mergeRecentPlayers(currentPlayers: PlayerSummary[], nextPlayer: PlayerSummary | null) {
   if (!nextPlayer) return currentPlayers;
 
   const dedupedPlayers = currentPlayers.filter((player) => player.id !== nextPlayer.id);
@@ -55,10 +53,7 @@ function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(
-      RECENT_PLAYERS_STORAGE_KEY,
-      JSON.stringify(recentPlayers)
-    );
+    window.localStorage.setItem(RECENT_PLAYERS_STORAGE_KEY, JSON.stringify(recentPlayers));
   }, [recentPlayers]);
 
   function handlePlayer1Select(player: PlayerSummary) {
@@ -90,9 +85,7 @@ function App() {
                 <button
                   onClick={() => setMode('stats')}
                   className={`px-4 py-2 rounded-lg ${
-                    mode === 'stats'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-700'
+                    mode === 'stats' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
                   }`}
                 >
                   Estadísticas
@@ -100,9 +93,7 @@ function App() {
                 <button
                   onClick={() => setMode('headToHead')}
                   className={`px-4 py-2 rounded-lg ${
-                    mode === 'headToHead'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-700'
+                    mode === 'headToHead' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
                   }`}
                 >
                   Head to Head
@@ -120,8 +111,8 @@ function App() {
               </div>
               <h2 className="text-2xl font-bold">Alineado con el schema real de Start.gg</h2>
               <p className="mt-2 text-sm text-slate-100">
-                Esta iteración usa los campos reales del API alpha para rankings, standings y
-                sets, y añade filtro explícito por juego de Smash.
+                Esta iteración usa los campos reales del API alpha para rankings, standings y sets,
+                y añade filtro explícito por juego de Smash.
               </p>
               <p className="mt-2 text-sm text-cyan-100">
                 La API alpha actual no permite buscar por gamerTag de forma oficial, así que esta
@@ -161,9 +152,9 @@ function App() {
           <section className="mb-8 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
             <div className="text-sm font-semibold text-slate-800">Cómo resolver jugadores</div>
             <div className="mt-2 text-sm text-slate-600">
-              Puedes escribir el nombre del jugador para ver candidatos, o bien usar directamente
-              su `playerId`, `user slug` o la URL completa del perfil. Si la key pertenece a tu
-              cuenta, también puedes usar el botón `Usar mi perfil`.
+              Puedes escribir el nombre del jugador para ver candidatos, o bien usar directamente su
+              `playerId`, `user slug` o la URL completa del perfil. Si la key pertenece a tu cuenta,
+              también puedes usar el botón `Usar mi perfil`.
             </div>
           </section>
 
@@ -177,10 +168,12 @@ function App() {
                 recentPlayers={recentPlayers}
               />
               {selectedPlayer1 && (
-                <PlayerStats
-                  playerId={selectedPlayer1.id}
-                  videogameId={selectedGameId}
-                />
+                <>
+                  <PlayerStats playerId={selectedPlayer1.id} videogameId={selectedGameId} />
+                  {selectedGameId === DEFAULT_SMASH_GAME_ID && (
+                    <PlayerPrediction playerId={selectedPlayer1.id} />
+                  )}
+                </>
               )}
             </div>
           ) : (
@@ -224,11 +217,19 @@ function App() {
               </div>
 
               {selectedPlayer1 && selectedPlayer2 && (
-                <HeadToHead
-                  player1Id={selectedPlayer1.id}
-                  player2Id={selectedPlayer2.id}
-                  videogameId={selectedGameId}
-                />
+                <>
+                  <HeadToHead
+                    player1Id={selectedPlayer1.id}
+                    player2Id={selectedPlayer2.id}
+                    videogameId={selectedGameId}
+                  />
+                  {selectedGameId === DEFAULT_SMASH_GAME_ID && (
+                    <PlayerPrediction
+                      playerId={selectedPlayer1.id}
+                      opponentId={selectedPlayer2.id}
+                    />
+                  )}
+                </>
               )}
             </div>
           )}
