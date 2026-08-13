@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "db:migrate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres.ps1 migrate",
+    "db:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres.ps1 start",
+    "db:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres.ps1 status",
     "lint": "eslint .",
     "format": "prettier --write server database src/components/PlayerPrediction.tsx src/components/PlayerPrediction.test.tsx src/lib/predictions.ts src/App.tsx package.json vite.config.ts tsconfig.node.json eslint.config.js",
     "test": "vitest run",
