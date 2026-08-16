@@ -1,5 +1,7 @@
-import { Pool, PoolClient, QueryResultRow } from 'pg';
-import { calculateRatingPeriod, CompletedMatch, PlayerRating } from './glicko2';
+import { Pool } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
+import { calculateRatingPeriod } from './glicko2.ts';
+import type { CompletedMatch, PlayerRating } from './glicko2.ts';
 
 interface RatingPeriodRow extends QueryResultRow {
   id: string;
@@ -56,7 +58,7 @@ async function loadRatingsBeforePeriod(client: PoolClient, startsAt: Date) {
       INNER JOIN rating_snapshots ON rating_snapshots.player_id = players.id
       INNER JOIN rating_periods ON rating_periods.id = rating_snapshots.rating_period_id
       WHERE rating_periods.status = 'completed'
-        AND rating_periods.ends_at < $1
+        AND rating_periods.ends_at <= $1
       ORDER BY players.id, rating_periods.ends_at DESC
     `,
     [startsAt]
@@ -206,5 +208,15 @@ export async function processNextRatingPeriod(pool: Pool): Promise<ProcessedRati
     throw error;
   } finally {
     client.release();
+  }
+}
+
+export async function processPendingRatingPeriods(pool: Pool) {
+  const processedPeriods: ProcessedRatingPeriod[] = [];
+
+  while (true) {
+    const processedPeriod = await processNextRatingPeriod(pool);
+    if (!processedPeriod) return processedPeriods;
+    processedPeriods.push(processedPeriod);
   }
 }

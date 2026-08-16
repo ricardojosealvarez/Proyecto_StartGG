@@ -1,4 +1,5 @@
-import { Glicko2, Player } from 'glicko2';
+import { Glicko2 } from 'glicko2';
+import type { Player } from 'glicko2';
 
 export const DEFAULT_GLICKO2_RATING = 1500;
 export const DEFAULT_GLICKO2_DEVIATION = 350;

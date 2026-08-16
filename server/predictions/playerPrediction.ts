@@ -1,4 +1,5 @@
-import { PlayerRating, predictWinProbability } from '../ratings/glicko2.ts';
+import { predictWinProbability } from '../ratings/glicko2.ts';
+import type { PlayerRating } from '../ratings/glicko2.ts';
 
 const MINIMUM_HISTORY_SIZE = 3;
 const STABLE_RATING_DELTA = 15;

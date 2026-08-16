@@ -11,6 +11,8 @@
     "db:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres.ps1 status",
     "lint": "eslint .",
     "format": "prettier --write server database src/components/PlayerPrediction.tsx src/components/PlayerPrediction.test.tsx src/lib/predictions.ts src/App.tsx package.json vite.config.ts tsconfig.node.json eslint.config.js",
+    "history:import": "node --experimental-transform-types server/cli/importHistory.ts",
+    "history:import-player": "node --experimental-transform-types server/cli/importPlayerHistory.ts",
     "test": "vitest run",
     "preview": "vite preview"
   },

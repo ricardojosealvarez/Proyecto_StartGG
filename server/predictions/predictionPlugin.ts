@@ -1,7 +1,8 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Pool } from 'pg';
-import { Plugin } from 'vite';
-import { PostgresRatingRepository, RatingHistoryRepository } from '../db/ratingRepository.ts';
+import type { Plugin } from 'vite';
+import { PostgresRatingRepository } from '../db/ratingRepository.ts';
+import type { RatingHistoryRepository } from '../db/ratingRepository.ts';
 import { logger } from '../utils/logger.ts';
 import { buildPlayerPrediction } from './playerPrediction.ts';
 

@@ -1,6 +1,7 @@
-import { Pool, QueryResultRow } from 'pg';
-import { RatingSnapshot } from '../predictions/playerPrediction.ts';
-import { PlayerRating } from '../ratings/glicko2.ts';
+import { Pool } from 'pg';
+import type { QueryResultRow } from 'pg';
+import type { RatingSnapshot } from '../predictions/playerPrediction.ts';
+import type { PlayerRating } from '../ratings/glicko2.ts';
 
 interface RatingSnapshotRow extends QueryResultRow {
   player_id: string;

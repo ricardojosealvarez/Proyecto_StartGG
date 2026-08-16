@@ -81,6 +81,9 @@ export interface HeadToHeadPlayer {
   user?: PlayerUser | null;
   sets?: {
     nodes: HeadToHeadSet[];
+    pageInfo?: {
+      totalPages: number;
+    } | null;
   } | null;
 }
 
@@ -104,7 +107,7 @@ export interface HeadToHeadSet {
   event: {
     name: string;
     videogame?: {
-      id: number;
+      id: string | number;
       displayName: string;
     } | null;
     tournament: {
@@ -117,4 +120,19 @@ export interface HeadToHeadSet {
 export interface HeadToHeadResponse {
   player1: HeadToHeadPlayer | null;
   player2: HeadToHeadPlayer | null;
+}
+
+export interface LocalHeadToHeadSet {
+  id: string;
+  winnerPlayerId: string;
+  displayScore: string | null;
+  completedAt: string;
+  eventName: string;
+  tournamentName: string;
+  player1Tag: string;
+  player2Tag: string;
+}
+
+export interface LocalHeadToHeadResponse {
+  sets: LocalHeadToHeadSet[];
 }

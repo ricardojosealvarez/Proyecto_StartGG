@@ -1,6 +1,10 @@
 import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { Pool } from 'pg';
+import { PlayerSearchRepository, PostgresPlayerRepository } from './server/db/playerRepository.ts';
 import { playerPredictionProxy } from './server/predictions/predictionPlugin.ts';
+import { logger } from './server/utils/logger.ts';
+import { headToHeadProxy } from './server/headToHead/headToHeadPlugin.ts';
 
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const ERROR_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -253,7 +257,22 @@ async function fetchRecentSmashPlayers(apiKey: string) {
   return players;
 }
 
-function playerSearchProxy(apiKey: string | undefined): Plugin {
+function mergePlayers(...playerGroups: SearchPlayer[][]) {
+  const playersById = new Map<string, SearchPlayer>();
+
+  for (const player of playerGroups.flat()) {
+    const currentPlayer = playersById.get(player.id);
+    playersById.set(player.id, currentPlayer?.user ? currentPlayer : player);
+  }
+
+  return [...playersById.values()];
+}
+
+function playerSearchProxy(apiKey: string | undefined, databaseUrl: string | undefined): Plugin {
+  const pool = databaseUrl ? new Pool({ connectionString: databaseUrl }) : null;
+  const repository: PlayerSearchRepository | null = pool
+    ? new PostgresPlayerRepository(pool)
+    : null;
   const handler = async (
     req: { method?: string; url?: string },
     res: {
@@ -276,11 +295,11 @@ function playerSearchProxy(apiKey: string | undefined): Plugin {
       return;
     }
 
-    if (!apiKey) {
+    if (!apiKey && !repository) {
       res.statusCode = 500;
       res.end(
         JSON.stringify({
-          error: 'Falta configurar `VITE_STARTGG_API_KEY` para buscar jugadores.',
+          error: 'Falta configurar `VITE_STARTGG_API_KEY` o `DATABASE_URL` para buscar jugadores.',
         })
       );
       return;
@@ -296,7 +315,26 @@ function playerSearchProxy(apiKey: string | undefined): Plugin {
 
     try {
       const normalizedQuery = normalizeSearchValue(query);
-      const players = await fetchRecentSmashPlayers(apiKey);
+      const [apiResult, databaseResult] = await Promise.allSettled([
+        apiKey ? fetchRecentSmashPlayers(apiKey) : Promise.resolve([]),
+        repository ? repository.searchByGamerTag(query) : Promise.resolve([]),
+      ]);
+      const apiPlayers = apiResult.status === 'fulfilled' ? apiResult.value : [];
+      const databasePlayers = databaseResult.status === 'fulfilled' ? databaseResult.value : [];
+
+      if (apiResult.status === 'rejected') {
+        logger.error('No se pudo buscar jugadores en Start.gg.', apiResult.reason);
+      }
+
+      if (databaseResult.status === 'rejected') {
+        logger.error('No se pudo buscar jugadores en PostgreSQL.', databaseResult.reason);
+      }
+
+      if (apiResult.status === 'rejected' && databaseResult.status === 'rejected') {
+        throw apiResult.reason;
+      }
+
+      const players = mergePlayers(databasePlayers, apiPlayers);
 
       const matchingPlayers = players
         .map((player) => ({
@@ -369,9 +407,15 @@ function playerSearchProxy(apiKey: string | undefined): Plugin {
     name: 'startgg-player-search-proxy',
     configureServer(server) {
       server.middlewares.use(handler);
+      server.httpServer?.once('close', () => {
+        void pool?.end();
+      });
     },
     configurePreviewServer(server) {
       server.middlewares.use(handler);
+      server.httpServer?.once('close', () => {
+        void pool?.end();
+      });
     },
   };
 }
@@ -382,7 +426,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
-      playerSearchProxy(env.VITE_STARTGG_API_KEY),
+      playerSearchProxy(env.VITE_STARTGG_API_KEY, env.DATABASE_URL),
+      headToHeadProxy(env.DATABASE_URL),
       playerPredictionProxy(env.DATABASE_URL),
     ],
     optimizeDeps: {

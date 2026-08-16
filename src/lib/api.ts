@@ -1,5 +1,13 @@
 import { ClientError, GraphQLClient } from 'graphql-request';
-import { PlayerSearchResponse, PlayerSummary, ResolveUserResponse } from './types';
+import {
+  HeadToHeadResponse,
+  HeadToHeadSet,
+  LocalHeadToHeadResponse,
+  PlayerSearchResponse,
+  PlayerSummary,
+  ResolveUserResponse,
+} from './types';
+import { getRecentHeadToHeadSets, HEAD_TO_HEAD_HISTORY_LIMIT } from './headToHead';
 
 const API_ENDPOINT = 'https://api.start.gg/gql/alpha';
 const API_KEY = import.meta.env.VITE_STARTGG_API_KEY;
@@ -163,6 +171,66 @@ export async function searchPlayersByName(query: string) {
   }));
 }
 
+export async function getHeadToHead(
+  player1Id: string,
+  player2Id: string,
+  videogameId: number
+) {
+  const allSets: HeadToHeadSet[] = [];
+  let page = 1;
+  let totalPages = 1;
+  let latestResponse: HeadToHeadResponse | null = null;
+
+  do {
+    latestResponse = await requestStartgg<HeadToHeadResponse>(headToHeadQuery, {
+      player1Id,
+      player2Id,
+      page,
+    });
+    const sets = latestResponse.player1?.sets;
+    allSets.push(...(sets?.nodes ?? []));
+    totalPages = sets?.pageInfo?.totalPages ?? page;
+    page += 1;
+  } while (
+    page <= totalPages &&
+    getRecentHeadToHeadSets(allSets, player1Id, player2Id, videogameId).length <
+      HEAD_TO_HEAD_HISTORY_LIMIT
+  );
+
+  if (!latestResponse?.player1) return latestResponse;
+
+  return {
+    ...latestResponse,
+    player1: {
+      ...latestResponse.player1,
+      sets: {
+        ...latestResponse.player1.sets,
+        nodes: allSets,
+      },
+    },
+  };
+}
+
+export async function getLocalHeadToHead(
+  player1Id: string,
+  player2Id: string,
+  videogameId: number
+) {
+  const params = new URLSearchParams({
+    player1Id,
+    player2Id,
+    videogameId: String(videogameId),
+  });
+  const response = await fetch(`/api/head-to-head?${params}`);
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? 'No se pudo consultar el historial local.');
+  }
+
+  return (await response.json()) as LocalHeadToHeadResponse;
+}
+
 export const resolvePlayerByIdQuery = `
   query ResolvePlayerById($playerId: ID!) {
     player(id: $playerId) {
@@ -248,7 +316,7 @@ export const getPlayerStatsQuery = `
 `;
 
 export const headToHeadQuery = `
-  query HeadToHead($player1Id: ID!, $player2Id: ID!) {
+  query HeadToHead($player1Id: ID!, $player2Id: ID!, $page: Int!) {
     player1: player(id: $player1Id) {
       id
       gamerTag
@@ -258,12 +326,16 @@ export const headToHeadQuery = `
         }
       }
       sets(
+        page: $page
         perPage: 50
         filters: {
           playerIds: [$player2Id]
           hideEmpty: true
         }
       ) {
+        pageInfo {
+          totalPages
+        }
         nodes {
           id
           winnerId

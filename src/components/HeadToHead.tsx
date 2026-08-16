@@ -1,13 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  getStartggErrorMessage,
-  headToHeadQuery,
-  requestStartgg,
-} from '../lib/api';
 import { Swords } from 'lucide-react';
+import { getLocalHeadToHead } from '../lib/api';
 import { formatEventDate } from '../lib/format';
 import { getSmashGameLabel } from '../lib/smash';
-import { HeadToHeadResponse } from '../lib/types';
 import { SummaryCard } from './SummaryCard';
 
 interface HeadToHeadProps {
@@ -17,9 +12,9 @@ interface HeadToHeadProps {
 }
 
 export function HeadToHead({ player1Id, player2Id, videogameId }: HeadToHeadProps) {
-  const { data, error, isLoading } = useQuery<HeadToHeadResponse>({
-    queryKey: ['headToHead', player1Id, player2Id, videogameId],
-    queryFn: () => requestStartgg<HeadToHeadResponse>(headToHeadQuery, { player1Id, player2Id }),
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['localHeadToHead', player1Id, player2Id, videogameId],
+    queryFn: () => getLocalHeadToHead(player1Id, player2Id, videogameId),
   });
 
   if (player1Id === player2Id) {
@@ -29,128 +24,78 @@ export function HeadToHead({ player1Id, player2Id, videogameId }: HeadToHeadProp
       </div>
     );
   }
-  if (isLoading) return <div>Cargando comparación...</div>;
+  if (isLoading) return <div>Cargando historial local completo...</div>;
   if (error) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-        {getStartggErrorMessage(error)}
+        {error instanceof Error ? error.message : 'No se pudo consultar el historial local.'}
       </div>
     );
   }
-  if (!data?.player1 || !data.player2) return null;
 
-  const { player1, player2 } = data;
-  const selectedPlayerIds = new Set([player1Id, player2Id]);
-  const setNodes = [...(player1.sets?.nodes ?? [])]
-    .filter((set) => {
-      const participantPlayerIds = new Set(
-        (set.slots ?? [])
-          .flatMap((slot) => slot.entrant?.participants ?? [])
-          .map((participant) => participant.player?.id)
-          .filter((playerId): playerId is string => Boolean(playerId))
-      );
-
-      if (participantPlayerIds.size !== 2) {
-        return false;
-      }
-
-      return [...participantPlayerIds].every((playerId) => selectedPlayerIds.has(playerId));
-    })
-    .filter((set) => set.event.videogame?.id === videogameId)
-    .sort((a, b) => b.event.tournament.startAt - a.event.tournament.startAt);
-
-  const results = setNodes.reduce(
-    (acc: { player1Wins: number; player2Wins: number }, set) => {
-      if (String(set.winnerId) === player1Id) acc.player1Wins++;
-      if (String(set.winnerId) === player2Id) acc.player2Wins++;
-      return acc;
+  const sets = data?.sets ?? [];
+  const player1Tag = sets[0]?.player1Tag ?? `Player ${player1Id}`;
+  const player2Tag = sets[0]?.player2Tag ?? `Player ${player2Id}`;
+  const results = sets.reduce(
+    (wins, set) => {
+      if (set.winnerPlayerId === player1Id) wins.player1 += 1;
+      if (set.winnerPlayerId === player2Id) wins.player2 += 1;
+      return wins;
     },
-    { player1Wins: 0, player2Wins: 0 }
+    { player1: 0, player2: 0 }
   );
-
-  const totalSets = setNodes.length;
   const advantageLabel =
-    results.player1Wins === results.player2Wins
+    results.player1 === results.player2
       ? 'Empate'
-      : results.player1Wins > results.player2Wins
-        ? player1.gamerTag
-        : player2.gamerTag;
+      : results.player1 > results.player2
+        ? player1Tag
+        : player2Tag;
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          {player1.user?.images?.[0]?.url && (
-            <img
-              src={player1.user.images[0].url}
-              alt={player1.gamerTag}
-              className="w-16 h-16 rounded-full"
-            />
-          )}
-          <div className="text-xl font-bold">{player1.gamerTag}</div>
-        </div>
-        <div className="flex items-center gap-4">
-          <Swords className="w-8 h-8 text-gray-400" />
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-xl font-bold">{player2.gamerTag}</div>
-          {player2.user?.images?.[0]?.url && (
-            <img
-              src={player2.user.images[0].url}
-              alt={player2.gamerTag}
-              className="w-16 h-16 rounded-full"
-            />
-          )}
-        </div>
+    <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-lg">
+      <div className="mb-6 flex items-center justify-between">
+        <div className="text-xl font-bold">{player1Tag}</div>
+        <Swords className="h-8 w-8 text-gray-400" />
+        <div className="text-xl font-bold">{player2Tag}</div>
       </div>
 
-      <div className="text-center mb-6">
+      <div className="mb-6 text-center">
         <div className="text-3xl font-bold">
-          {results.player1Wins} - {results.player2Wins}
+          {results.player1} - {results.player2}
         </div>
-        <div className="text-gray-600">Historial de enfrentamientos</div>
+        <div className="text-gray-600">Historial local completo</div>
         <div className="mt-1 text-sm text-blue-700">
           Filtrado para {getSmashGameLabel(videogameId)}
         </div>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Sets visibles" value={totalSets} />
+        <SummaryCard label="Sets guardados" value={sets.length} />
         <SummaryCard label="Ventaja" value={advantageLabel} tone="accent" />
-        <SummaryCard
-          label="Último score"
-          value={setNodes[0]?.displayScore ?? 'N/D'}
-          tone="success"
-        />
+        <SummaryCard label="Último score" value={sets[0]?.displayScore ?? 'N/D'} tone="success" />
       </div>
 
-      {setNodes.length > 0 ? (
+      {sets.length > 0 ? (
         <div className="space-y-3">
-          {setNodes.map((set) => (
-            <div
-              key={set.id}
-              className="bg-gray-50 p-4 rounded-lg"
-            >
-              <div className="flex justify-between items-center gap-4">
+          {sets.map((set) => (
+            <div key={set.id} className="rounded-lg bg-gray-50 p-4">
+              <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="font-medium">
-                    {set.event.tournament.name} - {set.event.name}
+                    {set.tournamentName} - {set.eventName}
                   </div>
-                  {set.fullRoundText && (
-                    <div className="text-sm text-gray-500">{set.fullRoundText}</div>
-                  )}
                 </div>
                 <div className="text-lg font-bold">{set.displayScore ?? 'Sin score visible'}</div>
               </div>
               <div className="text-sm text-gray-500">
-                {formatEventDate(set.event.tournament.startAt)}
+                {formatEventDate(Math.floor(new Date(set.completedAt).getTime() / 1000))}
               </div>
             </div>
           ))}
         </div>
       ) : (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
-          No hay sets visibles entre estos jugadores para {getSmashGameLabel(videogameId)}.
+          No hay sets importados entre estos jugadores para {getSmashGameLabel(videogameId)}.
         </div>
       )}
     </div>
