@@ -56,8 +56,7 @@ export function PlayerSearch({
   const lookupIsUserSlug = isUserSlug(normalizedLookupValue);
   const directLookupEnabled =
     normalizedLookupValue.length > 0 && (lookupIsPlayerId || lookupIsUserSlug);
-  const playerNameSearchEnabled =
-    normalizedLookupValue.length >= 2 && !directLookupEnabled;
+  const playerNameSearchEnabled = normalizedLookupValue.length >= 2 && !directLookupEnabled;
 
   const {
     data: directLookupResult,
@@ -108,14 +107,12 @@ export function PlayerSearch({
     enabled: playerNameSearchEnabled,
   });
 
-  const {
-    refetch: refetchCurrentUser,
-    isFetching: isFetchingCurrentUser,
-  } = useQuery<CurrentUserResponse>({
-    queryKey: ['currentUserPlayer'],
-    queryFn: () => requestStartgg<CurrentUserResponse>(currentUserPlayerQuery),
-    enabled: false,
-  });
+  const { refetch: refetchCurrentUser, isFetching: isFetchingCurrentUser } =
+    useQuery<CurrentUserResponse>({
+      queryKey: ['currentUserPlayer'],
+      queryFn: () => requestStartgg<CurrentUserResponse>(currentUserPlayerQuery),
+      enabled: false,
+    });
 
   const directResult = directLookupResult ?? directUserSlugResult ?? null;
   const directError = directLookupError ?? directUserSlugError ?? null;
@@ -130,20 +127,18 @@ export function PlayerSearch({
         : null;
 
   return (
-    <div className="w-full max-w-md">
-      {label && (
-        <label className="mb-2 block text-sm font-medium text-gray-700">{label}</label>
-      )}
+    <div className="player-search">
+      {label && <label className="player-search__label">{label}</label>}
 
       <div className="relative">
         <input
           type="text"
-          className="w-full rounded-lg border px-4 py-2 pl-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="player-search__input"
           placeholder="Nombre, player ID o user slug de Start.gg"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+        <Search className="player-search__search-icon" />
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -172,7 +167,7 @@ export function PlayerSearch({
             });
             setSearch(normalizeStartggUserSlug(currentUser.slug) ?? String(currentUser.player.id));
           }}
-          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          className="ui-action-button ui-action-button--small"
         >
           {isFetchingCurrentUser ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -190,22 +185,16 @@ export function PlayerSearch({
       </div>
 
       {selectedPlayer && (
-        <div className="mt-3 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+        <div className="player-search__selection">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-              Jugador seleccionado
-            </div>
-            <div className="font-medium text-gray-900">{selectedPlayer.gamerTag}</div>
-            <div className="text-sm text-blue-800">
+            <div className="ui-eyebrow">Jugador seleccionado</div>
+            <div className="font-medium">{selectedPlayer.gamerTag}</div>
+            <div className="ui-muted">
               {selectedPlayer.user?.slug ?? `Player ID ${selectedPlayer.id}`}
             </div>
           </div>
           {onClearSelection && (
-            <button
-              type="button"
-              onClick={onClearSelection}
-              className="rounded-md px-2 py-1 text-sm text-blue-700 hover:bg-blue-100"
-            >
+            <button type="button" onClick={onClearSelection} className="ui-text-button">
               Limpiar
             </button>
           )}
@@ -213,7 +202,7 @@ export function PlayerSearch({
       )}
 
       {recentPlayers.length > 0 && (
-        <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+        <div className="player-search__recent">
           <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
             <Clock3 className="h-4 w-4" />
             Recientes
@@ -227,7 +216,7 @@ export function PlayerSearch({
                   onPlayerSelect(player);
                   setSearch(player.user?.slug ?? player.id);
                 }}
-                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+                className="ui-chip ui-chip--button"
               >
                 {player.gamerTag}
               </button>
@@ -236,7 +225,7 @@ export function PlayerSearch({
         </div>
       )}
 
-      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+      <div className="player-search__help">
         <div>Formatos válidos:</div>
         <div className="mt-1 text-xs text-slate-700">MkLeo</div>
         <div className="mt-1 font-mono text-xs text-slate-700">2724258</div>
@@ -322,14 +311,11 @@ export function PlayerSearch({
         </div>
       )}
 
-      {directLookupEnabled &&
-        !isFetchingDirectResult &&
-        !directError &&
-        !directResult && (
-          <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-            No encontré un jugador para ese `playerId` o `user slug`.
-          </div>
-        )}
+      {directLookupEnabled && !isFetchingDirectResult && !directError && !directResult && (
+        <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          No encontré un jugador para ese `playerId` o `user slug`.
+        </div>
+      )}
 
       {playerNameSearchEnabled &&
         !isFetchingPlayerNameSearch &&

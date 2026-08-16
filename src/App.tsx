@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ArrowLeftRight, GamepadIcon } from 'lucide-react';
+import { ArrowLeftRight, Gamepad2 } from 'lucide-react';
 import { HeadToHead } from './components/HeadToHead';
 import { PlayerSearch } from './components/PlayerSearch';
 import { PlayerPrediction } from './components/PlayerPrediction';
@@ -68,80 +68,55 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-slate-100">
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-start gap-3">
-                <GamepadIcon className="h-8 w-8 text-blue-500" />
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Smash Start.gg Stats</h1>
-                  <p className="text-sm text-gray-600">
-                    MVP centrado en jugadores de Super Smash Bros. con datos de Start.gg.
-                  </p>
-                </div>
+      <div className="app-shell">
+        <header className="app-header">
+          <div className="app-container app-header__inner">
+            <div className="app-brand">
+              <div className="app-brand__mark">
+                <Gamepad2 />
               </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setMode('stats')}
-                  className={`px-4 py-2 rounded-lg ${
-                    mode === 'stats' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  Estadísticas
-                </button>
-                <button
-                  onClick={() => setMode('headToHead')}
-                  className={`px-4 py-2 rounded-lg ${
-                    mode === 'headToHead' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  Head to Head
-                </button>
+              <div>
+                <h1>SmashRate</h1>
+                <p>Competitive player intelligence</p>
               </div>
             </div>
+            <nav className="app-nav" aria-label="Vistas principales">
+              <button
+                onClick={() => setMode('stats')}
+                className={mode === 'stats' ? 'is-active' : undefined}
+              >
+                Player Profile
+              </button>
+              <button
+                onClick={() => setMode('headToHead')}
+                className={mode === 'headToHead' ? 'is-active' : undefined}
+              >
+                Head to Head
+              </button>
+            </nav>
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <section className="mb-8 rounded-2xl bg-gradient-to-r from-slate-900 via-blue-900 to-cyan-800 px-6 py-6 text-white shadow-lg">
-            <div className="max-w-3xl">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
-                Fase 2
-              </div>
-              <h2 className="text-2xl font-bold">Alineado con el schema real de Start.gg</h2>
-              <p className="mt-2 text-sm text-slate-100">
-                Esta iteración usa los campos reales del API alpha para rankings, standings y sets,
-                y añade filtro explícito por juego de Smash.
-              </p>
-              <p className="mt-2 text-sm text-cyan-100">
-                La API alpha actual no permite buscar por gamerTag de forma oficial, así que esta
-                versión combina resolución oficial por `playerId`/`user slug` con búsqueda por
-                nombre a partir de jugadores detectados en torneos Smash recientes.
-              </p>
-            </div>
-          </section>
-
+        <main className="app-container app-main">
           {!hasConfiguredApiKey && (
-            <section className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-4 text-amber-900 shadow-sm">
+            <section className="app-alert app-alert--warning">
               Falta configurar `VITE_STARTGG_API_KEY` en `.env`. Sin esa key la app no puede
               consultar datos en vivo de Start.gg.
             </section>
           )}
 
-          <section className="mb-8 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
-            <div className="mb-3 text-sm font-semibold text-slate-800">Juego Smash</div>
-            <div className="flex flex-wrap gap-3">
+          <section className="app-toolbar">
+            <div>
+              <div className="ui-eyebrow">Base de datos</div>
+              <div className="app-toolbar__title">Selecciona un juego</div>
+            </div>
+            <div className="app-game-picker">
               {SMASH_GAMES.map((game) => (
                 <button
                   key={game.id}
                   type="button"
                   onClick={() => setSelectedGameId(game.id)}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                    selectedGameId === game.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+                  className={selectedGameId === game.id ? 'is-active' : undefined}
                 >
                   {game.label}
                 </button>
@@ -149,38 +124,35 @@ function App() {
             </div>
           </section>
 
-          <section className="mb-8 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-            <div className="text-sm font-semibold text-slate-800">Cómo resolver jugadores</div>
-            <div className="mt-2 text-sm text-slate-600">
-              Puedes escribir el nombre del jugador para ver candidatos, o bien usar directamente su
-              `playerId`, `user slug` o la URL completa del perfil. Si la key pertenece a tu cuenta,
-              también puedes usar el botón `Usar mi perfil`.
-            </div>
-          </section>
-
           {mode === 'stats' ? (
-            <div className="space-y-8">
-              <PlayerSearch
-                label="Resolver jugador de Smash"
-                selectedPlayer={selectedPlayer1}
-                onPlayerSelect={handlePlayer1Select}
-                onClearSelection={() => setSelectedPlayer1(null)}
-                recentPlayers={recentPlayers}
-              />
-              {selectedPlayer1 && (
-                <>
-                  <PlayerStats playerId={selectedPlayer1.id} videogameId={selectedGameId} />
-                  {selectedGameId === DEFAULT_SMASH_GAME_ID && (
-                    <PlayerPrediction playerId={selectedPlayer1.id} />
-                  )}
-                </>
-              )}
+            <div className="app-page-grid">
+              <aside className="app-sidebar">
+                <PlayerSearch
+                  label="Buscar jugador"
+                  selectedPlayer={selectedPlayer1}
+                  onPlayerSelect={handlePlayer1Select}
+                  onClearSelection={() => setSelectedPlayer1(null)}
+                  recentPlayers={recentPlayers}
+                />
+              </aside>
+              <div className="app-page-content">
+                {selectedPlayer1 ? (
+                  <>
+                    <PlayerStats playerId={selectedPlayer1.id} videogameId={selectedGameId} />
+                    {selectedGameId === DEFAULT_SMASH_GAME_ID && (
+                      <PlayerPrediction playerId={selectedPlayer1.id} />
+                    )}
+                  </>
+                ) : (
+                  <div className="ui-placeholder">Selecciona un jugador para abrir su perfil.</div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="app-comparison-search">
                 <div>
-                  <h3 className="text-lg font-medium mb-4">Jugador 1</h3>
+                  <div className="ui-eyebrow">Competidor A</div>
                   <PlayerSearch
                     label="Nombre, player ID o user slug"
                     selectedPlayer={selectedPlayer1}
@@ -190,7 +162,7 @@ function App() {
                   />
                 </div>
                 <div>
-                  <h3 className="text-lg font-medium mb-4">Jugador 2</h3>
+                  <div className="ui-eyebrow">Competidor B</div>
                   <PlayerSearch
                     label="Nombre, player ID o user slug"
                     selectedPlayer={selectedPlayer2}
@@ -209,7 +181,7 @@ function App() {
                     setSelectedPlayer2(selectedPlayer1);
                   }}
                   disabled={!selectedPlayer1 || !selectedPlayer2}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="ui-action-button"
                 >
                   <ArrowLeftRight className="h-4 w-4" />
                   Intercambiar jugadores

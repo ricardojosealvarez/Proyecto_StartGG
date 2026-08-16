@@ -5,6 +5,7 @@ import { PlayerSearchRepository, PostgresPlayerRepository } from './server/db/pl
 import { playerPredictionProxy } from './server/predictions/predictionPlugin.ts';
 import { logger } from './server/utils/logger.ts';
 import { headToHeadProxy } from './server/headToHead/headToHeadPlugin.ts';
+import { characterStatsProxy } from './server/characters/characterStatsPlugin.ts';
 
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const ERROR_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -427,6 +428,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       playerSearchProxy(env.VITE_STARTGG_API_KEY, env.DATABASE_URL),
+      characterStatsProxy(env.STARTGG_API_KEY ?? env.VITE_STARTGG_API_KEY),
       headToHeadProxy(env.DATABASE_URL),
       playerPredictionProxy(env.DATABASE_URL),
     ],

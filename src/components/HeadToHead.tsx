@@ -4,6 +4,7 @@ import { getLocalHeadToHead } from '../lib/api';
 import { formatEventDate } from '../lib/format';
 import { getSmashGameLabel } from '../lib/smash';
 import { SummaryCard } from './SummaryCard';
+import { SectionTitle, Surface } from './DesignSystem';
 
 interface HeadToHeadProps {
   player1Id: string;
@@ -52,21 +53,23 @@ export function HeadToHead({ player1Id, player2Id, videogameId }: HeadToHeadProp
         : player2Tag;
 
   return (
-    <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-lg">
-      <div className="mb-6 flex items-center justify-between">
-        <div className="text-xl font-bold">{player1Tag}</div>
-        <Swords className="h-8 w-8 text-gray-400" />
-        <div className="text-xl font-bold">{player2Tag}</div>
-      </div>
+    <Surface className="ui-head-to-head">
+      <div className="ui-pixel-pattern" aria-hidden="true" />
+      <SectionTitle
+        eyebrow="Historial de enfrentamientos"
+        title="Comparación directa"
+        description={`Sets importados de ${getSmashGameLabel(videogameId)}`}
+      />
 
-      <div className="mb-6 text-center">
-        <div className="text-3xl font-bold">
-          {results.player1} - {results.player2}
+      <div className="ui-versus">
+        <div className="ui-versus__player">{player1Tag}</div>
+        <div className="ui-versus__score">
+          <Swords className="h-5 w-5" />
+          <strong>{results.player1}</strong>
+          <span>—</span>
+          <strong>{results.player2}</strong>
         </div>
-        <div className="text-gray-600">Historial local completo</div>
-        <div className="mt-1 text-sm text-blue-700">
-          Filtrado para {getSmashGameLabel(videogameId)}
-        </div>
+        <div className="ui-versus__player ui-versus__player--right">{player2Tag}</div>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -76,28 +79,30 @@ export function HeadToHead({ player1Id, player2Id, videogameId }: HeadToHeadProp
       </div>
 
       {sets.length > 0 ? (
-        <div className="space-y-3">
+        <div className="ui-results-list">
           {sets.map((set) => (
-            <div key={set.id} className="rounded-lg bg-gray-50 p-4">
-              <div className="flex items-center justify-between gap-4">
+            <div key={set.id} className="ui-result-row">
+              <div className="ui-result-row__main">
                 <div>
                   <div className="font-medium">
                     {set.tournamentName} - {set.eventName}
                   </div>
                 </div>
-                <div className="text-lg font-bold">{set.displayScore ?? 'Sin score visible'}</div>
+                <div className="ui-result-row__score">
+                  {set.displayScore ?? 'Sin score visible'}
+                </div>
               </div>
-              <div className="text-sm text-gray-500">
+              <div className="ui-muted">
                 {formatEventDate(Math.floor(new Date(set.completedAt).getTime() / 1000))}
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+        <div className="ui-empty-state">
           No hay sets importados entre estos jugadores para {getSmashGameLabel(videogameId)}.
         </div>
       )}
-    </div>
+    </Surface>
   );
 }

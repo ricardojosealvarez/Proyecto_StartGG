@@ -4,6 +4,7 @@ import {
   HeadToHeadSet,
   LocalHeadToHeadResponse,
   PlayerSearchResponse,
+  PlayerCharacterStats,
   PlayerSummary,
   ResolveUserResponse,
 } from './types';
@@ -229,6 +230,16 @@ export async function getLocalHeadToHead(
   }
 
   return (await response.json()) as LocalHeadToHeadResponse;
+}
+
+export async function getPlayerCharacterStats(playerId: string, videogameId: number) {
+  const params = new URLSearchParams({ playerId, videogameId: String(videogameId) });
+  const response = await fetch(`/api/player-character-stats?${params}`);
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? 'No se pudieron calcular los personajes del jugador.');
+  }
+  return (await response.json()) as PlayerCharacterStats;
 }
 
 export const resolvePlayerByIdQuery = `

@@ -75,6 +75,24 @@ export interface PlayerStatsResponse {
   player: PlayerDetails | null;
 }
 
+export interface CharacterUsage {
+  characterId: string;
+  name: string;
+  imageUrl: string | null;
+  games: number;
+  usage: number;
+}
+
+export interface PlayerCharacterStats {
+  primaryCharacter: CharacterUsage | null;
+  secondaryCharacters: CharacterUsage[];
+  characterUsage: CharacterUsage[];
+  gamesWithCharacterData: number;
+  gamesAnalyzed: number;
+  characterDataCoverage: number;
+  characterConfidence: 'none' | 'low' | 'medium' | 'high';
+}
+
 export interface HeadToHeadPlayer {
   id: string;
   gamerTag: string;
