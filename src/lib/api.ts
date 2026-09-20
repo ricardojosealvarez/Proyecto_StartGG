@@ -5,20 +5,20 @@ import {
   LocalHeadToHeadResponse,
   PlayerSearchResponse,
   PlayerCharacterStats,
+  PlayerImage,
   PlayerSummary,
+  PlayerAnalyticsResponse,
   ResolveUserResponse,
+  TournamentListResponse,
+  PlayerHistoryRefreshResponse,
 } from './types';
 import { getRecentHeadToHeadSets, HEAD_TO_HEAD_HISTORY_LIMIT } from './headToHead';
+import type { TournamentMode } from './tournamentMode';
 
 const API_ENDPOINT = 'https://api.start.gg/gql/alpha';
 const API_KEY = import.meta.env.VITE_STARTGG_API_KEY;
 
-export type StartggErrorCode =
-  | 'missing_key'
-  | 'expired_token'
-  | 'network'
-  | 'api'
-  | 'unknown';
+export type StartggErrorCode = 'missing_key' | 'expired_token' | 'network' | 'api' | 'unknown';
 
 export class StartggApiError extends Error {
   constructor(
@@ -92,8 +92,7 @@ export async function requestStartgg<TResponse>(
   } catch (error) {
     if (error instanceof ClientError) {
       const message =
-        error.response.errors?.map((entry) => entry.message).join(' ') ??
-        error.message;
+        error.response.errors?.map((entry) => entry.message).join(' ') ?? error.message;
 
       if (message.toLowerCase().includes('token has expired')) {
         throw new StartggApiError(
@@ -106,10 +105,7 @@ export async function requestStartgg<TResponse>(
     }
 
     if (error instanceof Error) {
-      throw new StartggApiError(
-        'network',
-        `No pude conectar con Start.gg: ${error.message}`
-      );
+      throw new StartggApiError('network', `No pude conectar con Start.gg: ${error.message}`);
     }
 
     throw new StartggApiError('unknown', 'Error inesperado al consultar Start.gg.');
@@ -172,11 +168,66 @@ export async function searchPlayersByName(query: string) {
   }));
 }
 
-export async function getHeadToHead(
-  player1Id: string,
-  player2Id: string,
-  videogameId: number
+export function getPlayerAvatarUrl(images?: PlayerImage[] | null): string | null {
+  return images?.find((image) => image.type?.toLowerCase() === 'profile')?.url ?? null;
+}
+
+export async function getPlayerAnalytics(
+  playerId: string,
+  videogameId: number,
+  tournamentMode: TournamentMode
 ) {
+  const params = new URLSearchParams({
+    playerId,
+    videogameId: String(videogameId),
+    tournamentMode,
+  });
+  const response = await fetch(`/api/player-analytics?${params}`);
+  if (!response.ok) throw new Error('No se pudieron cargar las estadísticas del jugador.');
+  return (await response.json()) as PlayerAnalyticsResponse;
+}
+
+export async function getTournaments(
+  playerId: string,
+  videogameId: number,
+  tournamentMode: TournamentMode
+) {
+  const params = new URLSearchParams({
+    playerId,
+    videogameId: String(videogameId),
+    tournamentMode,
+  });
+  const response = await fetch(`/api/tournaments?${params}`);
+  if (!response.ok) throw new Error('No se pudieron cargar los torneos.');
+  return (await response.json()) as TournamentListResponse;
+}
+
+export async function refreshPlayerHistory(playerId: string) {
+  const params = new URLSearchParams({ playerId });
+  const response = await fetch(`/api/player-history/refresh?${params}`, { method: 'POST' });
+  if (!response.ok) {
+    const responseText = await response.text();
+    let errorMessage: string | null = null;
+    try {
+      const payload = JSON.parse(responseText) as { error?: string };
+      errorMessage = payload.error ?? null;
+    } catch {
+      errorMessage = null;
+    }
+    throw new Error(
+      errorMessage ?? `No se pudo refrescar el historial del jugador (${response.status}).`
+    );
+  }
+
+  const responseText = await response.text();
+  try {
+    return JSON.parse(responseText) as PlayerHistoryRefreshResponse;
+  } catch {
+    throw new Error('El servidor devolvió una respuesta no válida al actualizar el jugador.');
+  }
+}
+
+export async function getHeadToHead(player1Id: string, player2Id: string, videogameId: number) {
   const allSets: HeadToHeadSet[] = [];
   let page = 1;
   let totalPages = 1;
@@ -252,6 +303,7 @@ export const resolvePlayerByIdQuery = `
         slug
         images {
           url
+          type
         }
       }
     }
@@ -265,6 +317,7 @@ export const resolvePlayerByUserSlugQuery = `
       bio
       images {
         url
+        type
       }
       player {
         id
@@ -281,6 +334,7 @@ export const currentUserPlayerQuery = `
       bio
       images {
         url
+        type
       }
       player {
         id
@@ -300,6 +354,7 @@ export const getPlayerStatsQuery = `
         slug
         images {
           url
+          type
         }
       }
       rankings(videogameId: $videogameId, limit: 6) {
@@ -318,6 +373,7 @@ export const getPlayerStatsQuery = `
             tournament {
               name
               startAt
+              isOnline
             }
           }
         }
@@ -334,6 +390,7 @@ export const headToHeadQuery = `
       user {
         images {
           url
+          type
         }
       }
       sets(
@@ -384,6 +441,7 @@ export const headToHeadQuery = `
       user {
         images {
           url
+          type
         }
       }
     }

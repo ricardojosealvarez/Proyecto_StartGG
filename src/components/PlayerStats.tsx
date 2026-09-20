@@ -1,20 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  getPlayerCharacterStats,
-  getPlayerStatsQuery,
-  getStartggErrorMessage,
-  requestStartgg,
-} from '../lib/api';
-import { Trophy } from 'lucide-react';
+import { getPlayerStatsQuery, getStartggErrorMessage, requestStartgg } from '../lib/api';
 import { formatEventDate } from '../lib/format';
 import { PlayerCharacterStats, PlayerStatsResponse } from '../lib/types';
-import { getSmashGameLabel } from '../lib/smash';
+import { filterStandingsByMode, TournamentMode } from '../lib/tournamentMode';
 import { SummaryCard } from './SummaryCard';
-import { PlayerAvatar, SectionTitle, Surface } from './DesignSystem';
+import { SectionTitle, Surface } from './DesignSystem';
 
 interface PlayerStatsProps {
   playerId: string;
   videogameId: number;
+  tournamentMode: TournamentMode;
+  onTournamentModeChange: (mode: TournamentMode) => void;
+  onOpenTournaments: () => void;
 }
 
 export function PlayerCharacterSummary({ stats }: { stats: PlayerCharacterStats }) {
@@ -48,7 +45,13 @@ export function PlayerCharacterSummary({ stats }: { stats: PlayerCharacterStats 
   );
 }
 
-export function PlayerStats({ playerId, videogameId }: PlayerStatsProps) {
+export function PlayerStats({
+  playerId,
+  videogameId,
+  tournamentMode,
+  onTournamentModeChange,
+  onOpenTournaments,
+}: PlayerStatsProps) {
   const { data, error, isLoading } = useQuery<PlayerStatsResponse>({
     queryKey: ['player', playerId, videogameId],
     queryFn: () =>
@@ -57,11 +60,6 @@ export function PlayerStats({ playerId, videogameId }: PlayerStatsProps) {
         videogameId,
       }),
   });
-  const { data: characterStats, isLoading: isLoadingCharacterStats } = useQuery({
-    queryKey: ['playerCharacters', playerId, videogameId],
-    queryFn: () => getPlayerCharacterStats(playerId, videogameId),
-  });
-
   if (isLoading) return <div>Cargando estadísticas...</div>;
   if (error) {
     return (
@@ -73,54 +71,15 @@ export function PlayerStats({ playerId, videogameId }: PlayerStatsProps) {
   if (!data?.player) return null;
 
   const { player } = data;
-  const results = [...(player.recentStandings ?? [])].sort(
+  const allResults = [...(player.recentStandings ?? [])].sort(
     (a, b) => b.entrant.event.tournament.startAt - a.entrant.event.tournament.startAt
   );
+  const results = filterStandingsByMode(allResults, tournamentMode);
   const bestPlacement =
     results.length > 0 ? Math.min(...results.map((result) => result.placement)) : null;
   const rankingCount = player.rankings?.length ?? 0;
-  const featuredCharacters = characterStats?.primaryCharacter
-    ? [characterStats.primaryCharacter, ...characterStats.secondaryCharacters]
-    : [];
-
   return (
     <Surface className="ui-profile">
-      <div className="ui-profile__hero">
-        <div className="ui-pixel-pattern" aria-hidden="true" />
-        <PlayerAvatar
-          gamerTag={player.gamerTag}
-          imageUrl={player.user?.images?.[0]?.url}
-          size="large"
-        />
-        <div className="ui-profile__identity">
-          <div className="ui-eyebrow">Información del jugador</div>
-          <h2>{player.gamerTag}</h2>
-          {player.user?.bio && <p>{player.user.bio}</p>}
-          <span className="ui-chip">{getSmashGameLabel(videogameId)}</span>
-        </div>
-        {featuredCharacters.length > 0 && (
-          <div className="ui-profile__characters">
-            {featuredCharacters.map((character, index) => (
-              <div key={character.characterId} className="ui-profile__character">
-                {character.imageUrl && <img src={character.imageUrl} alt={character.name} />}
-                <div>
-                  <div className="ui-eyebrow">
-                    {index === 0 ? 'Principal estimado' : 'Complementario'}
-                  </div>
-                  <strong>{character.name}</strong>
-                  <span>{Math.round(character.usage * 100)} % de uso</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {isLoadingCharacterStats && (
-          <div className="ui-profile__character ui-profile__character--loading">
-            Calculando personaje más utilizado…
-          </div>
-        )}
-      </div>
-
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryCard label="Resultados visibles" value={results.length} />
         <SummaryCard
@@ -131,36 +90,34 @@ export function PlayerStats({ playerId, videogameId }: PlayerStatsProps) {
         <SummaryCard label="Rankings activos" value={rankingCount} tone="success" />
       </div>
 
-      {characterStats && (
-        <div className="ui-content-section">
-          <SectionTitle eyebrow="Selecciones registradas en Start.gg" title="Personajes" />
-          <PlayerCharacterSummary stats={characterStats} />
-        </div>
-      )}
-
-      {player.rankings?.length ? (
-        <div className="ui-content-section">
-          <SectionTitle eyebrow="Clasificaciones destacadas" title="Rankings" />
-          <div className="ui-card-grid">
-            {player.rankings.map((ranking) => (
-              <div key={`${ranking.title}-${ranking.rank}`} className="ui-list-card">
-                <Trophy className="h-5 w-5 text-cyan-300" />
-                <div>
-                  <div className="font-medium">{ranking.title}</div>
-                  <div className="ui-muted">Rank #{ranking.rank}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="ui-empty-state">
-          No hay rankings visibles para este jugador en {getSmashGameLabel(videogameId)}.
-        </div>
-      )}
-
       <div className="ui-content-section">
         <SectionTitle eyebrow="Últimos resultados" title="Standings recientes" />
+        <button
+          type="button"
+          className="ui-action-button ui-action-button--small"
+          onClick={onOpenTournaments}
+        >
+          Ver todos los torneos
+        </button>
+        <div className="ui-filter-group" aria-label="Filtrar torneos por modalidad">
+          {(
+            [
+              ['all', 'Todos'],
+              ['offline', 'Offline'],
+              ['online', 'Online'],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              className={`ui-chip ui-chip--button${tournamentMode === mode ? ' is-active' : ''}`}
+              aria-pressed={tournamentMode === mode}
+              onClick={() => onTournamentModeChange(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         {results.length > 0 ? (
           <div className="ui-results-list">
             {results.map((result, index) => (
@@ -170,6 +127,9 @@ export function PlayerStats({ playerId, videogameId }: PlayerStatsProps) {
               >
                 <div className="font-medium">
                   {result.entrant.event.tournament.name} - {result.entrant.event.name}
+                  <span className="ui-tournament-mode">
+                    {result.entrant.event.tournament.isOnline ? 'Online' : 'Offline'}
+                  </span>
                 </div>
                 <div className="ui-result-row__placement">#{result.placement}</div>
                 <div className="ui-muted">
@@ -180,7 +140,7 @@ export function PlayerStats({ playerId, videogameId }: PlayerStatsProps) {
           </div>
         ) : (
           <div className="ui-empty-state">
-            Este jugador no tiene standings recientes visibles para este juego.
+            Este jugador no tiene standings recientes visibles para este juego y modalidad.
           </div>
         )}
       </div>

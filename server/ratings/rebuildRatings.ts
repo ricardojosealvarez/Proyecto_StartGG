@@ -54,7 +54,6 @@ async function prepareRatingPeriods(client: PoolClient) {
     [ULTIMATE_VIDEOGAME_ID]
   );
 
-  await client.query('DELETE FROM rating_snapshots');
   await client.query(`
     UPDATE rating_periods
     SET status = 'pending', calculated_at = NULL

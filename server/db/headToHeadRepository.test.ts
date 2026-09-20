@@ -30,4 +30,20 @@ describe('PostgresHeadToHeadRepository', () => {
       1386,
     ]);
   });
+
+  it('consulta los torneos donde ambos jugadores participaron', async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ tournament_id: '10', tournament_name: 'Shared', starts_at: new Date('2026-01-01') }],
+    });
+    const repository = new PostgresHeadToHeadRepository({ query } as unknown as Pool);
+
+    await expect(repository.getSharedTournaments('100', '200', 1386)).resolves.toEqual([
+      { id: '10', name: 'Shared', startsAt: new Date('2026-01-01') },
+    ]);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('HAVING COUNT(DISTINCT CASE'), [
+      '100',
+      '200',
+      1386,
+    ]);
+  });
 });

@@ -30,7 +30,11 @@ describe('rebuildRatings', () => {
       snapshotsCreated: 2,
     });
     expect(clientQuery).toHaveBeenCalledWith('BEGIN');
-    expect(clientQuery).toHaveBeenCalledWith('DELETE FROM rating_snapshots');
+    expect(
+      clientQuery.mock.calls.some(([statement]) =>
+        String(statement).includes('DELETE FROM rating_snapshots')
+      )
+    ).toBe(false);
     expect(clientQuery).toHaveBeenCalledWith('COMMIT');
     expect(release).toHaveBeenCalledOnce();
   });

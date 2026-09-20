@@ -26,6 +26,10 @@ export interface PlayerHistoryImportSummary extends HistoryImportSummary {
   tournamentsByRegion: Record<TournamentRegion, number>;
 }
 
+export interface PlayerHistoryRefreshSummary extends HistoryImportSummary {
+  candidateTournaments: number;
+}
+
 function mergeTournament(
   tournaments: Map<string, TournamentSummary>,
   tournament: TournamentSummary
@@ -43,6 +47,21 @@ function mergeTournament(
   }
 }
 
+async function getPlayerTournaments(source: PlayerHistorySource, playerId: string) {
+  const candidates = new Map<string, TournamentSummary>();
+  let page = 1;
+  let totalPages = 1;
+
+  while (page <= totalPages) {
+    const result = await source.getPlayerTournamentPage(playerId, page);
+    totalPages = result.totalPages;
+    for (const tournament of result.tournaments) mergeTournament(candidates, tournament);
+    page += 1;
+  }
+
+  return candidates;
+}
+
 function assertValidOptions(options: PlayerHistoryImportOptions) {
   if (!options.playerId.trim()) throw new Error('`playerId` es obligatorio.');
   if (options.from >= options.to) throw new Error('La fecha `from` debe ser anterior a `to`.');
@@ -58,16 +77,7 @@ export async function importPlayerHistory(
   options: PlayerHistoryImportOptions
 ): Promise<PlayerHistoryImportSummary> {
   assertValidOptions(options);
-  const candidates = new Map<string, TournamentSummary>();
-  let page = 1;
-  let totalPages = 1;
-
-  while (page <= totalPages) {
-    const result = await source.getPlayerTournamentPage(options.playerId, page);
-    totalPages = result.totalPages;
-    for (const tournament of result.tournaments) mergeTournament(candidates, tournament);
-    page += 1;
-  }
+  const candidates = await getPlayerTournaments(source, options.playerId);
 
   const selectedRegions = new Set(options.regions);
   const selected = [...candidates.values()]
@@ -92,6 +102,25 @@ export async function importPlayerHistory(
     candidateTournaments: candidates.size,
     selectedTournaments: selected.length,
     tournamentsByRegion,
+    ...imported,
+  };
+}
+
+export async function refreshPlayerHistory(
+  source: PlayerHistorySource,
+  repository: HistoryImportRepository,
+  playerId: string
+): Promise<PlayerHistoryRefreshSummary> {
+  if (!playerId.trim()) throw new Error('`playerId` es obligatorio.');
+
+  const candidates = await getPlayerTournaments(source, playerId);
+  const tournaments = [...candidates.values()].sort(
+    (left, right) => left.startAt - right.startAt || left.id.localeCompare(right.id)
+  );
+  const imported = await importTournamentSummaries(source, repository, tournaments);
+
+  return {
+    candidateTournaments: candidates.size,
     ...imported,
   };
 }

@@ -15,6 +15,7 @@ function createSource(): HistorySource {
           name: 'Tournament 1',
           slug: 'tournament/tournament-1',
           countryCode: 'ES',
+          isOnline: false,
           startAt: 1_700_000_000,
           endAt: 1_700_086_400,
           events: [{ id: 'event-1', name: 'Ultimate Singles', entrantCount: 2 }],

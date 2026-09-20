@@ -1,10 +1,21 @@
 import type { Plugin } from 'vite';
+import { Pool } from 'pg';
+import { PostgresCharacterStatsRepository } from '../db/characterStatsRepository.ts';
 import { StartggClient } from '../startgg/startggClient.ts';
 import { logger } from '../utils/logger.ts';
 import { PlayerCharacterService } from './playerCharacterService.ts';
 
-export function characterStatsProxy(apiKey: string | undefined): Plugin {
-  const service = apiKey ? new PlayerCharacterService(new StartggClient(apiKey)) : null;
+export function characterStatsProxy(
+  apiKey: string | undefined,
+  databaseUrl: string | undefined
+): Plugin {
+  const pool = databaseUrl ? new Pool({ connectionString: databaseUrl }) : null;
+  const repository = pool ? new PostgresCharacterStatsRepository(pool) : null;
+  const client = apiKey ? new StartggClient(apiKey) : null;
+  const service =
+    client || repository
+      ? new PlayerCharacterService(client, undefined, undefined, repository)
+      : null;
 
   const handler = async (
     req: { method?: string; url?: string },
@@ -28,7 +39,7 @@ export function characterStatsProxy(apiKey: string | undefined): Plugin {
     }
     if (!service) {
       res.statusCode = 500;
-      res.end(JSON.stringify({ error: 'Falta configurar la API key de Start.gg.' }));
+      res.end(JSON.stringify({ error: 'Falta configurar PostgreSQL o la API key de Start.gg.' }));
       return;
     }
 
@@ -55,9 +66,11 @@ export function characterStatsProxy(apiKey: string | undefined): Plugin {
     name: 'startgg-character-stats-proxy',
     configureServer(server) {
       server.middlewares.use(handler);
+      server.httpServer?.once('close', () => void pool?.end());
     },
     configurePreviewServer(server) {
       server.middlewares.use(handler);
+      server.httpServer?.once('close', () => void pool?.end());
     },
   };
 }

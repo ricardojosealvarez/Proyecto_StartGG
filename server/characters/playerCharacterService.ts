@@ -1,4 +1,6 @@
 import { StartggClient } from '../startgg/startggClient.ts';
+import type { CharacterStatsRepository } from '../db/characterStatsRepository.ts';
+import { logger } from '../utils/logger.ts';
 import {
   calculateCharacterStats,
   CHARACTER_LOOKBACK_MONTHS,
@@ -152,11 +154,13 @@ export function mapSetToCharacterGames(
 
 export class PlayerCharacterService {
   private readonly cache = new Map<string, CharacterStatsCacheEntry>();
+  private readonly refreshes = new Map<string, Promise<PlayerCharacterStats>>();
 
   constructor(
-    private readonly client: StartggClient,
+    private readonly client: StartggClient | null,
     private readonly now: () => Date = () => new Date(),
-    private readonly cacheTtlMs = CHARACTER_STATS_CACHE_TTL_MS
+    private readonly cacheTtlMs = CHARACTER_STATS_CACHE_TTL_MS,
+    private readonly repository: CharacterStatsRepository | null = null
   ) {}
 
   async getPlayerCharacterStats(
@@ -169,6 +173,52 @@ export class PlayerCharacterService {
     const cached = this.cache.get(cacheKey);
     if (!options.forceRefresh && cached && cached.expiresAt > this.now().getTime()) {
       return cached.stats;
+    }
+
+    if (!options.forceRefresh && this.repository) {
+      const stored = await this.repository.get(playerId, videogameId, lookbackMonths);
+      if (stored) {
+        this.cache.set(cacheKey, {
+          expiresAt: stored.expiresAt.getTime(),
+          stats: stored.stats,
+        });
+
+        if (stored.expiresAt.getTime() <= this.now().getTime() && this.client) {
+          this.refreshInBackground(cacheKey, playerId, videogameId, lookbackMonths);
+        }
+        return stored.stats;
+      }
+    }
+
+    return this.refresh(cacheKey, playerId, videogameId, lookbackMonths);
+  }
+
+  private refreshInBackground(
+    cacheKey: string,
+    playerId: string,
+    videogameId: string,
+    lookbackMonths: number
+  ) {
+    if (this.refreshes.has(cacheKey)) return;
+
+    const refresh = this.refresh(cacheKey, playerId, videogameId, lookbackMonths)
+      .catch((error) => {
+        logger.error('No se pudieron actualizar los personajes almacenados.', error);
+        throw error;
+      })
+      .finally(() => this.refreshes.delete(cacheKey));
+    this.refreshes.set(cacheKey, refresh);
+    void refresh.catch(() => undefined);
+  }
+
+  private async refresh(
+    cacheKey: string,
+    playerId: string,
+    videogameId: string,
+    lookbackMonths: number
+  ): Promise<PlayerCharacterStats> {
+    if (!this.client) {
+      throw new Error('No hay datos almacenados ni API key de Start.gg para calcularlos.');
     }
 
     const cutoffTimestamp = getCharacterCutoff(this.now(), lookbackMonths);
@@ -200,7 +250,20 @@ export class PlayerCharacterService {
     } while (page <= totalPages);
 
     const stats = calculateCharacterStats(games);
-    this.cache.set(cacheKey, { expiresAt: this.now().getTime() + this.cacheTtlMs, stats });
+    const calculatedAt = this.now();
+    const expiresAt = new Date(calculatedAt.getTime() + this.cacheTtlMs);
+    this.cache.set(cacheKey, { expiresAt: expiresAt.getTime(), stats });
+    if (this.repository) {
+      try {
+        await this.repository.upsert(playerId, videogameId, lookbackMonths, {
+          stats,
+          calculatedAt,
+          expiresAt,
+        });
+      } catch (error) {
+        logger.error('No se pudieron guardar los personajes en PostgreSQL.', error);
+      }
+    }
     return stats;
   }
 }

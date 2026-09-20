@@ -13,13 +13,16 @@
     "format": "prettier --write server database src/components/PlayerPrediction.tsx src/components/PlayerPrediction.test.tsx src/lib/predictions.ts src/App.tsx package.json vite.config.ts tsconfig.node.json eslint.config.js",
     "history:import": "node --experimental-transform-types server/cli/importHistory.ts",
     "history:import-player": "node --experimental-transform-types server/cli/importPlayerHistory.ts",
+    "tournaments:import-tiers": "node --experimental-transform-types server/cli/importTournamentTiers.ts",
     "ratings:rebuild": "node --experimental-transform-types server/cli/rebuildRatings.ts",
+    "characters:backfill": "node --experimental-transform-types server/cli/backfillCharacterStats.ts",
     "test": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.24.1",
     "clsx": "^2.1.0",
+    "exceljs": "^4.4.0",
     "glicko2": "^1.2.1",
     "graphql": "^16.8.1",
     "graphql-request": "^6.1.0",

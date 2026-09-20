@@ -11,6 +11,12 @@ export interface LocalHeadToHeadSet {
   player2Tag: string;
 }
 
+export interface LocalHeadToHeadTournament {
+  id: string;
+  name: string;
+  startsAt: Date;
+}
+
 interface HeadToHeadRow extends QueryResultRow {
   startgg_set_id: string;
   winner_player_id: string;
@@ -22,12 +28,23 @@ interface HeadToHeadRow extends QueryResultRow {
   player2_tag: string;
 }
 
+interface HeadToHeadTournamentRow extends QueryResultRow {
+  tournament_id: string;
+  tournament_name: string;
+  starts_at: Date;
+}
+
 export interface HeadToHeadRepository {
   getHistory(
     player1Id: string,
     player2Id: string,
     videogameId: number
   ): Promise<LocalHeadToHeadSet[]>;
+  getSharedTournaments(
+    player1Id: string,
+    player2Id: string,
+    videogameId: number
+  ): Promise<LocalHeadToHeadTournament[]>;
 }
 
 export class PostgresHeadToHeadRepository implements HeadToHeadRepository {
@@ -71,6 +88,42 @@ export class PostgresHeadToHeadRepository implements HeadToHeadRepository {
       tournamentName: row.tournament_name,
       player1Tag: row.player1_tag,
       player2Tag: row.player2_tag,
+    }));
+  }
+
+  async getSharedTournaments(player1Id: string, player2Id: string, videogameId: number) {
+    const result = await this.pool.query<HeadToHeadTournamentRow>(
+      `
+        SELECT tournaments.id AS tournament_id, tournaments.name AS tournament_name, tournaments.starts_at
+        FROM tournaments
+        INNER JOIN sets ON sets.tournament_id = tournaments.id
+        WHERE sets.videogame_id = $3
+          AND (
+            sets.winner_player_id IN (
+            (SELECT id FROM players WHERE startgg_player_id = $1),
+            (SELECT id FROM players WHERE startgg_player_id = $2)
+            )
+            OR sets.loser_player_id IN (
+            (SELECT id FROM players WHERE startgg_player_id = $1),
+            (SELECT id FROM players WHERE startgg_player_id = $2)
+            )
+          )
+        GROUP BY tournaments.id, tournaments.name, tournaments.starts_at
+        HAVING COUNT(DISTINCT CASE
+          WHEN sets.winner_player_id = (SELECT id FROM players WHERE startgg_player_id = $1)
+            OR sets.loser_player_id = (SELECT id FROM players WHERE startgg_player_id = $1) THEN $1
+          WHEN sets.winner_player_id = (SELECT id FROM players WHERE startgg_player_id = $2)
+            OR sets.loser_player_id = (SELECT id FROM players WHERE startgg_player_id = $2) THEN $2
+        END) = 2
+        ORDER BY tournaments.starts_at DESC
+      `,
+      [player1Id, player2Id, videogameId]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.tournament_id,
+      name: row.tournament_name,
+      startsAt: new Date(row.starts_at),
     }));
   }
 }

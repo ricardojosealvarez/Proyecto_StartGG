@@ -5,6 +5,7 @@ export interface Ranking {
 
 export interface PlayerImage {
   url: string;
+  type?: string | null;
 }
 
 export interface PlayerUser {
@@ -58,6 +59,7 @@ export interface RecentStanding {
       tournament: {
         name: string;
         startAt: number;
+        isOnline: boolean;
       };
     };
   };
@@ -73,6 +75,42 @@ export interface PlayerDetails {
 
 export interface PlayerStatsResponse {
   player: PlayerDetails | null;
+}
+
+export interface PlayerYearStats {
+  year: number;
+  tournaments: number;
+  wins: number;
+  averageScore: number | null;
+  bestScore: number | null;
+}
+
+export interface PlayerAnalyticsResponse {
+  years: PlayerYearStats[];
+  source: 'database';
+}
+
+export interface TournamentListItem {
+  id: string;
+  name: string;
+  slug: string | null;
+  countryCode: string | null;
+  startsAt: string;
+  isOnline: boolean;
+  tier: string | null;
+}
+
+export interface TournamentListResponse {
+  tournaments: TournamentListItem[];
+  source: 'database';
+}
+
+export interface PlayerHistoryRefreshResponse {
+  candidateTournaments: number;
+  tournamentsSeen: number;
+  tournamentsSaved: number;
+  setsSaved: number;
+  ratingPeriodsProcessed: number;
 }
 
 export interface CharacterUsage {
@@ -153,4 +191,5 @@ export interface LocalHeadToHeadSet {
 
 export interface LocalHeadToHeadResponse {
   sets: LocalHeadToHeadSet[];
+  tournaments: Array<{ id: string; name: string; startsAt: string }>;
 }

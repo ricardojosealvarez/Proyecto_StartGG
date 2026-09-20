@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  groupHeadToHeadSetsByTournament,
   getRecentHeadToHeadSets,
   getSetWinnerPlayerId,
   isHeadToHeadSet,
@@ -33,6 +34,41 @@ function createSet(): HeadToHeadSet {
 }
 
 describe('head-to-head sets', () => {
+  it('agrupa todos los sets del torneo y conserva torneos sin H2H', () => {
+    const rows = groupHeadToHeadSetsByTournament(
+      [
+        { id: 't-1', name: 'Coincidencia', startsAt: '2026-01-01' },
+        { id: 't-2', name: 'Sin duelo', startsAt: '2025-01-01' },
+      ],
+      [
+        {
+          id: 'set-1',
+          winnerPlayerId: '100',
+          displayScore: 'Vidad 3 - Sisqui 1',
+          completedAt: '2026-01-01',
+          eventName: 'Singles',
+          tournamentName: 'Coincidencia',
+          player1Tag: 'Vidad',
+          player2Tag: 'Sisqui',
+        },
+        {
+          id: 'set-2',
+          winnerPlayerId: '200',
+          displayScore: 'Vidad 0 - Sisqui 3',
+          completedAt: '2026-01-01',
+          eventName: 'Doubles',
+          tournamentName: 'Coincidencia',
+          player1Tag: 'Vidad',
+          player2Tag: 'Sisqui',
+        },
+      ]
+    );
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.results).toHaveLength(2);
+    expect(rows[1]?.results).toHaveLength(0);
+  });
+
   it('acepta el videogame ID textual devuelto por GraphQL', () => {
     expect(isHeadToHeadSet(createSet(), '100', '200', 1386)).toBe(true);
   });

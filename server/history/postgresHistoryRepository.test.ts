@@ -8,6 +8,7 @@ const tournament: ImportedTournament = {
   name: 'Tournament 1',
   slug: 'tournament/tournament-1',
   countryCode: 'ES',
+  isOnline: false,
   startAt: 1_700_000_000,
   endAt: 1_700_086_400,
   completedAt: new Date('2023-11-15T12:00:00Z'),
@@ -76,7 +77,7 @@ function createPool() {
 }
 
 describe('PostgresHistoryRepository', () => {
-  it('persiste un torneo completo e invalida ratings posteriores', async () => {
+  it('persiste un torneo y marca ratings posteriores sin eliminarlos', async () => {
     const { pool, query, release } = createPool();
     const repository = new PostgresHistoryRepository(pool);
 
@@ -86,10 +87,36 @@ describe('PostgresHistoryRepository', () => {
     expect(query).toHaveBeenCalledWith('BEGIN');
     expect(query).toHaveBeenCalledWith('COMMIT');
     expect(
+      query.mock.calls.some(([statement]) => String(statement).includes("SET status = 'pending'"))
+    ).toBe(true);
+    expect(
       query.mock.calls.some(([statement]) =>
         String(statement).includes('DELETE FROM rating_snapshots')
       )
-    ).toBe(true);
+    ).toBe(false);
     expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('deduplica sets repetidos dentro del mismo torneo antes del upsert', async () => {
+    const { pool, query } = createPool();
+    const repository = new PostgresHistoryRepository(pool);
+    const duplicateTournament = {
+      ...tournament,
+      events: [
+        {
+          ...tournament.events[0],
+          sets: [...tournament.events[0].sets, tournament.events[0].sets[0]],
+        },
+      ],
+    };
+
+    await repository.saveTournament(duplicateTournament);
+
+    const setInsert = query.mock.calls.find(([statement]) =>
+      String(statement).includes('INSERT INTO sets')
+    );
+    expect(setInsert?.[1]?.[2]).toBe(
+      '[{"startgg_set_id":"set-1","event_id":20,"winner_player_id":30,"loser_player_id":31,"completed_at":"2023-11-15T11:00:00.000Z","raw_payload":{"displayScore":"Winner 3 - Loser 0"}}]'
+    );
   });
 });

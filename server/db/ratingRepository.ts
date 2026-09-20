@@ -45,7 +45,6 @@ export class PostgresRatingRepository implements RatingHistoryRepository {
         INNER JOIN players ON players.id = rating_snapshots.player_id
         INNER JOIN rating_periods ON rating_periods.id = rating_snapshots.rating_period_id
         WHERE players.startgg_player_id = $1
-          AND rating_periods.status = 'completed'
         ORDER BY rating_periods.ends_at DESC
         LIMIT $2
       `,

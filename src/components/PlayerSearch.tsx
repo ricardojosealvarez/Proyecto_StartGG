@@ -3,6 +3,7 @@ import { Clock3, Loader2, Search, UserCircle2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import {
   currentUserPlayerQuery,
+  getPlayerAvatarUrl,
   getPlayerSearchErrorMessage,
   normalizeStartggUserSlug,
   requestStartgg,
@@ -40,6 +41,43 @@ function normalizeLookupValue(value: string) {
   }
 
   return trimmedValue;
+}
+
+interface PlayerSearchResultsProps {
+  players: PlayerSummary[];
+  onSelect: (player: PlayerSummary) => void;
+}
+
+export function PlayerSearchResults({ players, onSelect }: PlayerSearchResultsProps) {
+  return (
+    <div className="player-search__results">
+      {players.map((player) => {
+        const avatarUrl = getPlayerAvatarUrl(player.user?.images);
+
+        return (
+          <button
+            key={player.id}
+            type="button"
+            className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-gray-100 last:border-b-0"
+            onClick={() => onSelect(player)}
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={player.gamerTag} className="h-10 w-10 rounded-full" />
+            ) : (
+              <UserCircle2 className="h-10 w-10 text-slate-500" aria-hidden="true" />
+            )}
+            <div>
+              <div className="font-medium">{player.gamerTag}</div>
+              <div className="text-sm text-gray-600">
+                Player ID: {player.id}
+                {player.user?.slug ? ` · ${player.user.slug}` : ''}
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function PlayerSearch({
@@ -141,6 +179,44 @@ export function PlayerSearch({
         <Search className="player-search__search-icon" />
       </div>
 
+      {(isFetchingDirectResult || isFetchingPlayerNameSearch) && (
+        <div className="mt-2 text-center text-gray-600">
+          {directLookupEnabled ? 'Resolviendo jugador...' : 'Buscando jugadores...'}
+        </div>
+      )}
+
+      {directError && (
+        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {getPlayerSearchErrorMessage(directError)}
+        </div>
+      )}
+
+      {playerNameSearchError && (
+        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {getPlayerSearchErrorMessage(playerNameSearchError)}
+        </div>
+      )}
+
+      {directResult && !selectedPlayer && (
+        <PlayerSearchResults
+          players={[directResult]}
+          onSelect={(player) => {
+            onPlayerSelect({ ...player, id: String(player.id) });
+            setSearch(player.user?.slug ?? player.gamerTag);
+          }}
+        />
+      )}
+
+      {playerNameResults.length > 0 && !selectedPlayer && (
+        <PlayerSearchResults
+          players={playerNameResults}
+          onSelect={(player) => {
+            onPlayerSelect(player);
+            setSearch(player.user?.slug ?? player.gamerTag);
+          }}
+        />
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -194,7 +270,14 @@ export function PlayerSearch({
             </div>
           </div>
           {onClearSelection && (
-            <button type="button" onClick={onClearSelection} className="ui-text-button">
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('');
+                onClearSelection();
+              }}
+              className="ui-text-button"
+            >
               Limpiar
             </button>
           )}
@@ -232,84 +315,6 @@ export function PlayerSearch({
         <div className="mt-1 font-mono text-xs text-slate-700">user/e4bc09eb</div>
         <div className="mt-1 font-mono text-xs text-slate-700">https://start.gg/user/e4bc09eb</div>
       </div>
-
-      {(isFetchingDirectResult || isFetchingPlayerNameSearch) && (
-        <div className="mt-2 text-center text-gray-600">
-          {directLookupEnabled ? 'Resolviendo jugador...' : 'Buscando jugadores...'}
-        </div>
-      )}
-
-      {directError && (
-        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {getPlayerSearchErrorMessage(directError)}
-        </div>
-      )}
-
-      {playerNameSearchError && (
-        <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {getPlayerSearchErrorMessage(playerNameSearchError)}
-        </div>
-      )}
-
-      {directResult && (
-        <div className="mt-2 rounded-lg bg-white shadow-lg">
-          <button
-            className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-100"
-            onClick={() => {
-              onPlayerSelect({
-                ...directResult,
-                id: String(directResult.id),
-              });
-              setSearch(directResult.user?.slug ?? directResult.gamerTag);
-            }}
-          >
-            {directResult.user?.images?.[0]?.url && (
-              <img
-                src={directResult.user.images[0].url}
-                alt={directResult.gamerTag}
-                className="h-10 w-10 rounded-full"
-              />
-            )}
-            <div>
-              <div className="font-medium">{directResult.gamerTag}</div>
-              <div className="text-sm text-gray-600">
-                Player ID: {directResult.id}
-                {directResult.user?.slug ? ` · ${directResult.user.slug}` : ''}
-              </div>
-            </div>
-          </button>
-        </div>
-      )}
-
-      {playerNameResults.length > 0 && (
-        <div className="mt-2 overflow-hidden rounded-lg bg-white shadow-lg">
-          {playerNameResults.map((player) => (
-            <button
-              key={player.id}
-              className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-gray-100 last:border-b-0"
-              onClick={() => {
-                onPlayerSelect(player);
-                setSearch(player.user?.slug ?? player.gamerTag);
-              }}
-            >
-              {player.user?.images?.[0]?.url && (
-                <img
-                  src={player.user.images[0].url}
-                  alt={player.gamerTag}
-                  className="h-10 w-10 rounded-full"
-                />
-              )}
-              <div>
-                <div className="font-medium">{player.gamerTag}</div>
-                <div className="text-sm text-gray-600">
-                  Player ID: {player.id}
-                  {player.user?.slug ? ` · ${player.user.slug}` : ''}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
 
       {directLookupEnabled && !isFetchingDirectResult && !directError && !directResult && (
         <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">

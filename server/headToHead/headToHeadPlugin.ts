@@ -40,8 +40,11 @@ export function createHeadToHeadHandler(repository: HeadToHeadRepository | null)
     }
 
     try {
-      const sets = await repository.getHistory(player1Id, player2Id, videogameId);
-      sendJson(response, 200, { sets });
+      const [sets, tournaments] = await Promise.all([
+        repository.getHistory(player1Id, player2Id, videogameId),
+        repository.getSharedTournaments(player1Id, player2Id, videogameId),
+      ]);
+      sendJson(response, 200, { sets, tournaments });
     } catch (error) {
       logger.error('No se pudo consultar el Head to Head local.', error);
       sendJson(response, 500, { error: 'No se pudo consultar el historial local.' });

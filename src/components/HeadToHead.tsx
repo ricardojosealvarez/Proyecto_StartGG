@@ -3,6 +3,7 @@ import { Swords } from 'lucide-react';
 import { getLocalHeadToHead } from '../lib/api';
 import { formatEventDate } from '../lib/format';
 import { getSmashGameLabel } from '../lib/smash';
+import { groupHeadToHeadSetsByTournament } from '../lib/headToHead';
 import { SummaryCard } from './SummaryCard';
 import { SectionTitle, Surface } from './DesignSystem';
 
@@ -35,6 +36,8 @@ export function HeadToHead({ player1Id, player2Id, videogameId }: HeadToHeadProp
   }
 
   const sets = data?.sets ?? [];
+  const tournaments = data?.tournaments ?? [];
+  const tournamentRows = groupHeadToHeadSetsByTournament(tournaments, sets);
   const player1Tag = sets[0]?.player1Tag ?? `Player ${player1Id}`;
   const player2Tag = sets[0]?.player2Tag ?? `Player ${player2Id}`;
   const results = sets.reduce(
@@ -78,31 +81,51 @@ export function HeadToHead({ player1Id, player2Id, videogameId }: HeadToHeadProp
         <SummaryCard label="Último score" value={sets[0]?.displayScore ?? 'N/D'} tone="success" />
       </div>
 
-      {sets.length > 0 ? (
-        <div className="ui-results-list">
-          {sets.map((set) => (
-            <div key={set.id} className="ui-result-row">
-              <div className="ui-result-row__main">
-                <div>
-                  <div className="font-medium">
-                    {set.tournamentName} - {set.eventName}
-                  </div>
-                </div>
-                <div className="ui-result-row__score">
-                  {set.displayScore ?? 'Sin score visible'}
-                </div>
-              </div>
-              <div className="ui-muted">
-                {formatEventDate(Math.floor(new Date(set.completedAt).getTime() / 1000))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="ui-empty-state">
-          No hay sets importados entre estos jugadores para {getSmashGameLabel(videogameId)}.
-        </div>
-      )}
+      <div className="mt-6">
+        <h3 className="mb-3 font-semibold">Torneos compartidos</h3>
+        {tournamentRows.length > 0 ? (
+          <div className="ui-tournament-table-wrap">
+            <table className="ui-tournament-table">
+              <thead>
+                <tr>
+                  <th scope="col">Torneos donde han coincidido</th>
+                  <th scope="col">H2H</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tournamentRows.map((tournament) => (
+                  <tr key={tournament.id}>
+                    <td>
+                      <div className="font-medium">{tournament.name}</div>
+                      <div className="ui-muted">
+                        {formatEventDate(
+                          Math.floor(new Date(tournament.startsAt).getTime() / 1000)
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      {tournament.results.length > 0 ? (
+                        <div className="ui-tournament-table__results">
+                          {tournament.results.map((set) => (
+                            <div key={set.id}>
+                              <span className="ui-muted">{set.eventName}</span>
+                              <strong>{set.displayScore ?? 'Sin score visible'}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="ui-muted">No se llegaron a enfrentar</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="ui-empty-state">No hay torneos en común registrados.</div>
+        )}
+      </div>
     </Surface>
   );
 }

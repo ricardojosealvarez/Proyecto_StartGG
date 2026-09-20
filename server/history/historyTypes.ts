@@ -5,6 +5,7 @@ export interface TournamentSummary {
   name: string;
   slug: string;
   countryCode: string | null;
+  isOnline: boolean;
   startAt: number;
   endAt: number | null;
   events: EventSummary[];

@@ -43,6 +43,7 @@ const TOURNAMENT_HISTORY_QUERY = `
         name
         slug
         countryCode
+        isOnline
         startAt
         endAt
         events(filter: { videogameId: [$videogameId] }) {
@@ -75,6 +76,7 @@ const PLAYER_TOURNAMENT_HISTORY_QUERY = `
               name
               slug
               countryCode
+              isOnline
               startAt
               endAt
             }
@@ -128,6 +130,7 @@ interface TournamentNode {
   name: string;
   slug: string;
   countryCode?: string | null;
+  isOnline: boolean;
   startAt: number;
   endAt?: number | null;
   events?: TournamentEventNode[] | null;
@@ -186,6 +189,7 @@ function mapTournament(tournament: TournamentNode): TournamentSummary {
     name: tournament.name,
     slug: tournament.slug,
     countryCode: tournament.countryCode?.toUpperCase() ?? null,
+    isOnline: tournament.isOnline,
     startAt: tournament.startAt,
     endAt: tournament.endAt ?? null,
     events: (tournament.events ?? []).map(mapEvent),

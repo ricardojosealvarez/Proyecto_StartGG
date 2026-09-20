@@ -7,6 +7,7 @@ import {
   requestPlayerPrediction,
 } from '../lib/predictions';
 import { SummaryCard } from './SummaryCard';
+import { Surface } from './DesignSystem';
 
 interface PlayerPredictionProps {
   playerId: string;
@@ -38,7 +39,7 @@ function TrendIcon({ trend }: { trend: RatingTrend }) {
 export function PlayerPredictionContent({ prediction }: PlayerPredictionContentProps) {
   if (prediction.status === 'insufficient_history') {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
+      <div className="app-alert app-alert--warning">
         Se necesitan {prediction.requiredHistorySize} periodos y actualmente hay{' '}
         {prediction.historySize}. La predicción permanecerá desactivada hasta disponer de suficiente
         trayectoria.
@@ -47,28 +48,32 @@ export function PlayerPredictionContent({ prediction }: PlayerPredictionContentP
   }
 
   return (
-    <section className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-lg">
-      <div className="mb-6 flex items-center gap-3">
+    <Surface className="ui-prediction">
+      <div className="mb-4 flex items-center gap-3">
         <TrendIcon trend={prediction.trend} />
         <div>
-          <h3 className="text-xl font-bold">Predicción Glicko-2</h3>
-          <p className="text-sm text-slate-600">
+          <h3 className="text-base font-semibold">Predicción Glicko-2</h3>
+          <p className="ui-muted">
             Basada en {prediction.historySize} periodos cronológicos consolidados.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="ui-prediction__metrics">
         <SummaryCard label="Rating actual" value={Math.round(prediction.currentRating)} />
         <SummaryCard
           label="Próximo periodo"
           value={Math.round(prediction.projectedRating)}
           tone="accent"
         />
-        <SummaryCard label="Tendencia" value={trendLabels[prediction.trend]} tone="success" />
+        <SummaryCard
+          label="Tendencia"
+          value={trendLabels[prediction.trend]}
+          tone={prediction.trend === 'rising' ? 'success' : 'neutral'}
+        />
       </div>
 
-      <div className="mt-4 text-sm text-slate-600">
+      <div className="mt-3 ui-muted">
         Confianza {confidenceLabels[prediction.confidence].toLowerCase()} · RD{' '}
         {prediction.ratingDeviation.toFixed(1)} · Variación acumulada{' '}
         {prediction.ratingDelta >= 0 ? '+' : ''}
@@ -76,12 +81,12 @@ export function PlayerPredictionContent({ prediction }: PlayerPredictionContentP
       </div>
 
       {prediction.opponentWinProbability !== undefined && (
-        <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-900">
+        <div className="ui-prediction__probability">
           Probabilidad estimada de victoria:{' '}
           <strong>{Math.round(prediction.opponentWinProbability * 100)}%</strong>
         </div>
       )}
-    </section>
+    </Surface>
   );
 }
 
@@ -94,7 +99,7 @@ export function PlayerPrediction({ playerId, opponentId }: PlayerPredictionProps
   if (isLoading) return <div>Calculando predicción...</div>;
   if (error) {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
+      <div className="app-alert app-alert--warning">
         {error instanceof Error ? error.message : 'No se pudo consultar la predicción.'}
       </div>
     );

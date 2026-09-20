@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { StartggClient } from '../startgg/startggClient.ts';
+import type { CharacterStatsRepository } from '../db/characterStatsRepository.ts';
 import {
   getCharacterCutoff,
   mapSetToCharacterGames,
@@ -104,6 +105,41 @@ describe('mapSetToCharacterGames', () => {
 });
 
 describe('PlayerCharacterService', () => {
+  it('responde desde PostgreSQL sin consultar Start.gg', async () => {
+    const storedStats = {
+      primaryCharacter: {
+        characterId: '155',
+        name: 'Byleth',
+        imageUrl: null,
+        games: 20,
+        usage: 0.8,
+      },
+      secondaryCharacters: [],
+      characterUsage: [],
+      gamesWithCharacterData: 20,
+      gamesAnalyzed: 20,
+      characterDataCoverage: 1,
+      characterConfidence: 'high' as const,
+    };
+    const repository = {
+      get: vi.fn().mockResolvedValue({
+        stats: storedStats,
+        calculatedAt: new Date('2026-08-18T00:00:00Z'),
+        expiresAt: new Date('2026-08-19T00:00:00Z'),
+      }),
+      upsert: vi.fn(),
+    } satisfies CharacterStatsRepository;
+    const service = new PlayerCharacterService(
+      null,
+      () => new Date('2026-08-18T12:00:00Z'),
+      undefined,
+      repository
+    );
+
+    await expect(service.getPlayerCharacterStats('player-1', '1386')).resolves.toEqual(storedStats);
+    expect(repository.upsert).not.toHaveBeenCalled();
+  });
+
   it('pagina, agrega resultados y reutiliza la cache', async () => {
     const request = vi
       .fn()
@@ -112,8 +148,12 @@ describe('PlayerCharacterService', () => {
       })
       .mockResolvedValueOnce({ player: { sets: { pageInfo: { totalPages: 2 }, nodes: [] } } });
     const client = { request } as unknown as StartggClient;
+    const repository = {
+      get: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue(undefined),
+    } satisfies CharacterStatsRepository;
     const now = () => new Date('2026-08-16T00:00:00Z');
-    const service = new PlayerCharacterService(client, now);
+    const service = new PlayerCharacterService(client, now, undefined, repository);
 
     const first = await service.getPlayerCharacterStats('player-1', '1386', {
       lookbackMonths: 120,
@@ -125,6 +165,12 @@ describe('PlayerCharacterService', () => {
     expect(first.primaryCharacter?.name).toBe('Byleth');
     expect(second).toEqual(first);
     expect(request).toHaveBeenCalledTimes(2);
+    expect(repository.upsert).toHaveBeenCalledWith(
+      'player-1',
+      '1386',
+      120,
+      expect.objectContaining({ stats: first })
+    );
     expect(request).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining('updatedAfter: $updatedAfter'),

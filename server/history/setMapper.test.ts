@@ -7,6 +7,7 @@ const tournament: TournamentSummary = {
   name: 'Ultimate Test',
   slug: 'tournament/ultimate-test',
   countryCode: 'ES',
+  isOnline: false,
   startAt: 1_700_000_000,
   endAt: 1_700_086_400,
   events: [],

@@ -1,6 +1,23 @@
-import type { HeadToHeadSet } from './types';
+import type { HeadToHeadSet, LocalHeadToHeadSet } from './types';
 
 export const HEAD_TO_HEAD_HISTORY_LIMIT = 10;
+
+export interface HeadToHeadTournamentRow {
+  id: string;
+  name: string;
+  startsAt: string;
+  results: LocalHeadToHeadSet[];
+}
+
+export function groupHeadToHeadSetsByTournament(
+  tournaments: Array<{ id: string; name: string; startsAt: string }>,
+  sets: LocalHeadToHeadSet[]
+): HeadToHeadTournamentRow[] {
+  return tournaments.map((tournament) => ({
+    ...tournament,
+    results: sets.filter((set) => set.tournamentName === tournament.name),
+  }));
+}
 
 export function getSetPlayerIds(set: HeadToHeadSet) {
   return new Set(
@@ -30,9 +47,7 @@ export function isHeadToHeadSet(
 
 export function getSetWinnerPlayerId(set: HeadToHeadSet) {
   const winnerEntrantId = String(set.winnerId);
-  const winnerSlot = (set.slots ?? []).find(
-    (slot) => String(slot.entrant?.id) === winnerEntrantId
-  );
+  const winnerSlot = (set.slots ?? []).find((slot) => String(slot.entrant?.id) === winnerEntrantId);
   const winnerPlayerId = winnerSlot?.entrant?.participants?.[0]?.player?.id;
 
   return winnerPlayerId ? String(winnerPlayerId) : null;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HistoryImportRepository } from './historyImporter.ts';
-import { importPlayerHistory } from './playerHistoryImporter.ts';
+import { importPlayerHistory, refreshPlayerHistory } from './playerHistoryImporter.ts';
 import type { PlayerHistorySource } from './playerHistoryImporter.ts';
 
 function tournament(id: string, countryCode: string, startAt: number, eventId = `event-${id}`) {
@@ -9,6 +9,7 @@ function tournament(id: string, countryCode: string, startAt: number, eventId = 
     name: `Tournament ${id}`,
     slug: `tournament/${id}`,
     countryCode,
+    isOnline: false,
     startAt,
     endAt: startAt + 3_600,
     events: [{ id: eventId, name: 'Ultimate Singles', entrantCount: 2 }],
@@ -55,5 +56,25 @@ describe('importPlayerHistory', () => {
     expect(source.getSetPage).toHaveBeenNthCalledWith(1, 'event-1', 1);
     expect(source.getSetPage).toHaveBeenNthCalledWith(2, 'event-2', 1);
     expect(source.getSetPage).toHaveBeenNthCalledWith(3, 'event-2-extra', 1);
+  });
+});
+
+describe('refreshPlayerHistory', () => {
+  it('importa todos los torneos de Ultimate sin limitar país o fecha', async () => {
+    const source: PlayerHistorySource = {
+      getPlayerTournamentPage: vi.fn().mockResolvedValue({
+        totalPages: 1,
+        tournaments: [tournament('2', 'JP', 1_710_000_000), tournament('1', 'ES', 1_000_000_000)],
+      }),
+      getTournamentPage: vi.fn(),
+      getSetPage: vi.fn().mockResolvedValue({ totalPages: 0, sets: [] }),
+    };
+    const repository: HistoryImportRepository = { saveTournament: vi.fn() };
+
+    const result = await refreshPlayerHistory(source, repository, '1354812');
+
+    expect(result.candidateTournaments).toBe(2);
+    expect(source.getSetPage).toHaveBeenNthCalledWith(1, 'event-1', 1);
+    expect(source.getSetPage).toHaveBeenNthCalledWith(2, 'event-2', 1);
   });
 });

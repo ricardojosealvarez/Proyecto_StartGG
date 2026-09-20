@@ -41,14 +41,16 @@ async function upsertTournament(client: PoolClient, tournament: ImportedTourname
         name,
         slug,
         country_code,
+        is_online,
         starts_at,
         completed_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (startgg_tournament_id) DO UPDATE SET
         name = EXCLUDED.name,
         slug = EXCLUDED.slug,
         country_code = EXCLUDED.country_code,
+        is_online = EXCLUDED.is_online,
         starts_at = EXCLUDED.starts_at,
         completed_at = EXCLUDED.completed_at,
         updated_at = NOW()
@@ -59,6 +61,7 @@ async function upsertTournament(client: PoolClient, tournament: ImportedTourname
       tournament.name,
       tournament.slug,
       tournament.countryCode,
+      tournament.isOnline,
       new Date(tournament.startAt * 1000),
       tournament.completedAt,
     ]
@@ -251,6 +254,15 @@ async function upsertSets(
   return result.rowCount ?? 0;
 }
 
+function uniqueSets(sets: ImportedSet[]) {
+  const seen = new Set<string>();
+  return sets.filter((set) => {
+    if (seen.has(set.id)) return false;
+    seen.add(set.id);
+    return true;
+  });
+}
+
 async function synchronizePeriodSets(
   client: PoolClient,
   tournamentId: string,
@@ -297,15 +309,6 @@ async function synchronizePeriodSets(
 async function invalidateRatings(client: PoolClient, startsAt: Date) {
   await client.query(
     `
-      DELETE FROM rating_snapshots
-      WHERE rating_period_id IN (
-        SELECT id FROM rating_periods WHERE starts_at >= $1
-      )
-    `,
-    [startsAt]
-  );
-  await client.query(
-    `
       UPDATE rating_periods
       SET status = 'pending', calculated_at = NULL
       WHERE starts_at >= $1
@@ -323,7 +326,7 @@ export class PostgresHistoryRepository implements HistoryImportRepository {
     try {
       await client.query('BEGIN');
 
-      const sets = tournament.events.flatMap((event) => event.sets);
+      const sets = uniqueSets(tournament.events.flatMap((event) => event.sets));
       const tournamentId = await upsertTournament(client, tournament);
       const eventIds = await upsertEvents(client, tournamentId, tournament);
       const playerIds = await upsertPlayers(client, uniquePlayers(sets));
