@@ -9,9 +9,10 @@ describe('PlayerAnalytics', () => {
       <QueryClientProvider client={new QueryClient()}>
         <PlayerAnalytics
           player={{ id: '10', gamerTag: 'Vidad' }}
-          videogameId={1386}
-          tournamentMode="online"
-          onBack={() => undefined}
+      videogameId={1386}
+      tournamentMode="online"
+      onTournamentModeChange={() => undefined}
+      onBack={() => undefined}
         />
       </QueryClientProvider>
     );

@@ -9,6 +9,8 @@ import { characterStatsProxy } from './server/characters/characterStatsPlugin.ts
 import { playerAnalyticsProxy } from './server/analytics/playerAnalyticsPlugin.ts';
 import { tournamentListProxy } from './server/tournaments/tournamentListPlugin.ts';
 import { playerHistoryRefreshProxy } from './server/history/playerHistoryRefreshPlugin.ts';
+import { StartggClient } from './server/startgg/startggClient.ts';
+import { PostgresStartggRateLimiter } from './server/startgg/postgresRateLimiter.ts';
 
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const ERROR_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -16,9 +18,6 @@ const SMASH_GAME_IDS = [1386, 1, 5, 3, 4];
 const TOURNAMENT_PAGES_PER_GAME = 6;
 const TOURNAMENTS_PER_GAME = 4;
 const ENTRANTS_PER_EVENT = 64;
-const STARTGG_ALPHA_URL = 'https://api.start.gg/gql/alpha';
-const REQUEST_DELAY_MS = 250;
-const MAX_REQUEST_RETRIES = 2;
 
 type SearchPlayer = {
   id: string;
@@ -51,60 +50,14 @@ function scorePlayerMatch(player: SearchPlayer, normalizedQuery: string) {
 }
 
 async function requestStartggFromServer<TResponse>(
-  apiKey: string,
+  client: StartggClient,
   query: string,
   variables?: Record<string, unknown>
 ) {
-  for (let attempt = 0; attempt <= MAX_REQUEST_RETRIES; attempt += 1) {
-    const response = await fetch(STARTGG_ALPHA_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query, variables }),
-    });
-
-    if (response.status === 429 && attempt < MAX_REQUEST_RETRIES) {
-      await sleep(REQUEST_DELAY_MS * (attempt + 2));
-      continue;
-    }
-
-    if (!response.ok) {
-      throw new Error(`Start.gg respondió con ${response.status}.`);
-    }
-
-    const payload = (await response.json()) as {
-      data?: TResponse;
-      errors?: Array<{ message?: string }>;
-    };
-
-    if (payload.errors?.length) {
-      const message = payload.errors
-        .map((entry) => entry.message)
-        .filter(Boolean)
-        .join(' ');
-
-      throw new Error(message || 'Start.gg devolvió un error al construir el índice de jugadores.');
-    }
-
-    if (!payload.data) {
-      throw new Error('Start.gg no devolvió datos para construir el índice de jugadores.');
-    }
-
-    return payload.data;
-  }
-
-  throw new Error('Start.gg respondió con 429.');
+  return client.request<TResponse>(query, variables ?? {});
 }
 
-function sleep(durationMs: number) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, durationMs);
-  });
-}
-
-async function fetchRecentSmashPlayers(apiKey: string) {
+async function fetchRecentSmashPlayers(client: StartggClient) {
   const cacheKey = 'official-smash-player-index';
   const cachedEntry = playerSearchCache.get(cacheKey);
 
@@ -198,7 +151,7 @@ async function fetchRecentSmashPlayers(apiKey: string) {
               }> | null;
             }>;
           };
-        }>(apiKey, tournamentQuery, {
+        }>(client, tournamentQuery, {
           videogameId,
           page,
           perPage: TOURNAMENTS_PER_GAME,
@@ -216,8 +169,6 @@ async function fetchRecentSmashPlayers(apiKey: string) {
 
         throw error;
       }
-
-      await sleep(REQUEST_DELAY_MS);
     }
 
     if (hitRateLimit) {
@@ -278,6 +229,11 @@ function mergePlayers(...playerGroups: SearchPlayer[][]) {
 
 function playerSearchProxy(apiKey: string | undefined, databaseUrl: string | undefined): Plugin {
   const pool = databaseUrl ? new Pool({ connectionString: databaseUrl }) : null;
+  const startggClient = apiKey
+    ? new StartggClient(apiKey, {
+        rateLimiter: pool ? new PostgresStartggRateLimiter(pool, apiKey) : undefined,
+      })
+    : null;
   const repository: PlayerSearchRepository | null = pool
     ? new PostgresPlayerRepository(pool)
     : null;
@@ -324,7 +280,7 @@ function playerSearchProxy(apiKey: string | undefined, databaseUrl: string | und
     try {
       const normalizedQuery = normalizeSearchValue(query);
       const [apiResult, databaseResult] = await Promise.allSettled([
-        apiKey ? fetchRecentSmashPlayers(apiKey) : Promise.resolve([]),
+        startggClient ? fetchRecentSmashPlayers(startggClient) : Promise.resolve([]),
         repository ? repository.searchByGamerTag(query) : Promise.resolve([]),
       ]);
       const apiPlayers = apiResult.status === 'fulfilled' ? apiResult.value : [];

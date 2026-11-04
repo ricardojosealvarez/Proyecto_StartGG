@@ -192,6 +192,7 @@ function AppContent() {
             player={selectedPlayer1}
             videogameId={selectedGameId}
             tournamentMode={tournamentMode}
+            onTournamentModeChange={setTournamentMode}
             onBack={() => setMode('stats')}
           />
         ) : mode === 'stats' ? (
@@ -228,6 +229,9 @@ function AppContent() {
             <div className="app-page-content">
               {selectedPlayer1 ? (
                 <>
+                  {selectedGameId === DEFAULT_SMASH_GAME_ID && (
+                    <PlayerPrediction playerId={selectedPlayer1.id} />
+                  )}
                   <PlayerStats
                     playerId={selectedPlayer1.id}
                     videogameId={selectedGameId}
@@ -235,9 +239,6 @@ function AppContent() {
                     onTournamentModeChange={setTournamentMode}
                     onOpenTournaments={() => setMode('tournaments')}
                   />
-                  {selectedGameId === DEFAULT_SMASH_GAME_ID && (
-                    <PlayerPrediction playerId={selectedPlayer1.id} />
-                  )}
                 </>
               ) : (
                 <div className="ui-placeholder">Selecciona un jugador para abrir su perfil.</div>

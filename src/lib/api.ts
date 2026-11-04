@@ -361,7 +361,7 @@ export const getPlayerStatsQuery = `
         rank
         title
       }
-      recentStandings(videogameId: $videogameId, limit: 20) {
+      recentStandings(videogameId: $videogameId, limit: 10) {
         placement
         entrant {
           event {

@@ -9,6 +9,7 @@ describe('parseImportOptions', () => {
       from: new Date('2026-07-01T00:00:00.000Z'),
       to: new Date('2026-07-31T23:59:59.999Z'),
       maxTournaments: 10,
+      refresh: false,
     });
   });
 
@@ -22,5 +23,9 @@ describe('parseImportOptions', () => {
     expect(() => parseImportOptions(['--max-tournaments=0'])).toThrow(
       '`--max-tournaments` debe ser un entero positivo o `all`.'
     );
+  });
+
+  it('permite reiniciar deliberadamente un intervalo completado', () => {
+    expect(parseImportOptions(['--refresh']).refresh).toBe(true);
   });
 });

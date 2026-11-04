@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { calculateRatingPeriod, PlayerRating, predictWinProbability } from './glicko2';
+import {
+  calculateRatingPeriod,
+  inflateRatingDeviation,
+  PlayerRating,
+  predictWinProbability,
+} from './glicko2';
 
 function createRating(playerId: string, rating: number, deviation: number): PlayerRating {
   return {
@@ -48,6 +53,16 @@ describe('calculateRatingPeriod', () => {
     expect(() =>
       calculateRatingPeriod([], [{ winnerPlayerId: 'same', loserPlayerId: 'same' }])
     ).toThrow('Un jugador no puede enfrentarse contra sí mismo.');
+  });
+
+  it('reconstruye exactamente la desviación tras periodos inactivos', () => {
+    const initial = createRating('player', 1500, 120);
+    const afterOne = calculateRatingPeriod([initial], [])[0];
+    const afterTwo = calculateRatingPeriod([afterOne], [])[0];
+    expect(inflateRatingDeviation(initial.deviation, initial.volatility, 2)).toBeCloseTo(
+      afterTwo.deviation,
+      10
+    );
   });
 });
 

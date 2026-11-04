@@ -92,31 +92,33 @@ export function PlayerStats({
 
       <div className="ui-content-section">
         <SectionTitle eyebrow="Últimos resultados" title="Standings recientes" />
-        <button
-          type="button"
-          className="ui-action-button ui-action-button--small"
-          onClick={onOpenTournaments}
-        >
-          Ver todos los torneos
-        </button>
-        <div className="ui-filter-group" aria-label="Filtrar torneos por modalidad">
-          {(
-            [
-              ['all', 'Todos'],
-              ['offline', 'Offline'],
-              ['online', 'Online'],
-            ] as const
-          ).map(([mode, label]) => (
-            <button
-              key={mode}
-              type="button"
-              className={`ui-chip ui-chip--button${tournamentMode === mode ? ' is-active' : ''}`}
-              aria-pressed={tournamentMode === mode}
-              onClick={() => onTournamentModeChange(mode)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="ui-results-toolbar">
+          <button
+            type="button"
+            className="ui-action-button ui-action-button--small"
+            onClick={onOpenTournaments}
+          >
+            Ver todos los torneos
+          </button>
+          <div className="ui-filter-group" aria-label="Filtrar torneos por modalidad">
+            {(
+              [
+                ['all', 'Todos'],
+                ['offline', 'Offline'],
+                ['online', 'Online'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                className={`ui-chip ui-chip--button${tournamentMode === mode ? ' is-active' : ''}`}
+                aria-pressed={tournamentMode === mode}
+                onClick={() => onTournamentModeChange(mode)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {results.length > 0 ? (
           <div className="ui-results-list">

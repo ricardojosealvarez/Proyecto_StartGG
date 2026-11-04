@@ -32,7 +32,8 @@ const tournament: ImportedTournament = {
 };
 
 function createPool() {
-  const query = vi.fn(async (statement: string) => {
+  const query = vi.fn(async (...args: [string, unknown[]?]) => {
+    const [statement] = args;
     if (statement.includes('INSERT INTO tournaments')) return { rows: [{ id: '10' }], rowCount: 1 };
     if (statement.includes('INSERT INTO events')) {
       return { rows: [{ id: '20', startgg_event_id: 'event-1' }], rowCount: 1 };
@@ -85,6 +86,7 @@ describe('PostgresHistoryRepository', () => {
 
     expect(result).toEqual({ changed: true, setsSaved: 1 });
     expect(query).toHaveBeenCalledWith('BEGIN');
+    expect(query).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock($1, $2)', [1386, 1]);
     expect(query).toHaveBeenCalledWith('COMMIT');
     expect(
       query.mock.calls.some(([statement]) => String(statement).includes("SET status = 'pending'"))
@@ -115,8 +117,15 @@ describe('PostgresHistoryRepository', () => {
     const setInsert = query.mock.calls.find(([statement]) =>
       String(statement).includes('INSERT INTO sets')
     );
-    expect(setInsert?.[1]?.[2]).toBe(
-      '[{"startgg_set_id":"set-1","event_id":20,"winner_player_id":30,"loser_player_id":31,"completed_at":"2023-11-15T11:00:00.000Z","raw_payload":{"displayScore":"Winner 3 - Loser 0"}}]'
-    );
+    expect(JSON.parse(String(setInsert?.[1]?.[2]))).toEqual([
+      {
+        startgg_set_id: 'set-1',
+        event_id: '20',
+        winner_player_id: '30',
+        loser_player_id: '31',
+        completed_at: '2023-11-15T11:00:00.000Z',
+        raw_payload: { displayScore: 'Winner 3 - Loser 0' },
+      },
+    ]);
   });
 });

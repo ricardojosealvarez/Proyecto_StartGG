@@ -5,6 +5,7 @@ export const DEFAULT_GLICKO2_RATING = 1500;
 export const DEFAULT_GLICKO2_DEVIATION = 350;
 export const DEFAULT_GLICKO2_VOLATILITY = 0.06;
 export const DEFAULT_GLICKO2_TAU = 0.5;
+const GLICKO2_SCALE = 173.7178;
 
 export interface PlayerRating {
   playerId: string;
@@ -24,6 +25,20 @@ export interface Glicko2Settings {
   initialRating?: number;
   initialDeviation?: number;
   initialVolatility?: number;
+}
+
+export function inflateRatingDeviation(
+  deviation: number,
+  volatility: number,
+  inactivePeriods: number
+) {
+  if (!Number.isInteger(inactivePeriods) || inactivePeriods < 0) {
+    throw new Error('`inactivePeriods` debe ser un entero no negativo.');
+  }
+  return (
+    Math.sqrt((deviation / GLICKO2_SCALE) ** 2 + inactivePeriods * volatility ** 2) *
+    GLICKO2_SCALE
+  );
 }
 
 function createDefaultRating(playerId: string): PlayerRating {

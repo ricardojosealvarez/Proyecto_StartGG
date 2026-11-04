@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { PoolClient, QueryResultRow } from 'pg';
-import { calculateRatingPeriod } from './glicko2.ts';
+import { calculateRatingPeriod, inflateRatingDeviation } from './glicko2.ts';
 import type { CompletedMatch, PlayerRating } from './glicko2.ts';
+import { lockRatingData, RATING_LOCK_NAMESPACE, RATING_WORKER_LOCK } from './ratingLocks.ts';
 
 interface RatingPeriodRow extends QueryResultRow {
   id: string;
@@ -15,6 +17,7 @@ interface PlayerRatingRow extends QueryResultRow {
   deviation: number;
   volatility: number;
   matches_played: number;
+  inactive_periods: number;
 }
 
 interface CompletedMatchRow extends QueryResultRow {
@@ -30,6 +33,12 @@ export interface ProcessedRatingPeriod {
   externalKey: string;
   playerCount: number;
   setCount: number;
+  timings: { loadMs: number; calculateMs: number; persistMs: number; totalMs: number };
+}
+
+export interface RatingProcessingOptions {
+  maxPeriods?: number;
+  onPeriod?: (period: ProcessedRatingPeriod) => void;
 }
 
 async function loadNextPendingPeriod(client: PoolClient) {
@@ -39,35 +48,86 @@ async function loadNextPendingPeriod(client: PoolClient) {
     WHERE status = 'pending'
     ORDER BY starts_at ASC, id ASC
     LIMIT 1
-    FOR UPDATE SKIP LOCKED
+    FOR UPDATE
   `);
 
   return result.rows[0] ?? null;
 }
 
-async function loadRatingsBeforePeriod(client: PoolClient, startsAt: Date) {
+async function loadRatingsBeforePeriod(
+  client: PoolClient,
+  period: RatingPeriodRow,
+  playerIds: string[]
+) {
+  if (playerIds.length === 0) return [];
   const result = await client.query<PlayerRatingRow>(
     `
-      SELECT DISTINCT ON (players.id)
-        players.startgg_player_id AS player_id,
-        rating_snapshots.rating,
-        rating_snapshots.deviation,
-        rating_snapshots.volatility,
-        rating_snapshots.matches_played
-      FROM players
-      INNER JOIN rating_snapshots ON rating_snapshots.player_id = players.id
-      INNER JOIN rating_periods ON rating_periods.id = rating_snapshots.rating_period_id
-      WHERE rating_periods.status = 'completed'
-        AND rating_periods.ends_at <= $1
-      ORDER BY players.id, rating_periods.ends_at DESC
+      WITH requested_players AS (
+        SELECT UNNEST($1::text[]) AS player_id
+      ), available_snapshots AS (
+        SELECT
+          rating_snapshots.player_id,
+          rating_snapshots.rating,
+          rating_snapshots.deviation,
+          rating_snapshots.volatility,
+          rating_snapshots.matches_played,
+          rating_periods.starts_at AS period_starts_at,
+          rating_periods.id AS period_id
+        FROM rating_snapshots
+        INNER JOIN rating_periods ON rating_periods.id = rating_snapshots.rating_period_id
+        WHERE rating_periods.status = 'completed'
+          AND rating_periods.snapshot_mode = 'dense'
+        UNION ALL
+        SELECT
+          rating_checkpoints.player_id,
+          rating_checkpoints.rating,
+          rating_checkpoints.deviation,
+          rating_checkpoints.volatility,
+          rating_checkpoints.matches_played,
+          rating_periods.starts_at,
+          rating_periods.id
+        FROM rating_checkpoints
+        INNER JOIN rating_periods ON rating_periods.id = rating_checkpoints.rating_period_id
+          AND rating_periods.calculation_id = rating_checkpoints.calculation_id
+        WHERE rating_periods.status = 'completed'
+          AND rating_periods.snapshot_mode = 'sparse'
+      )
+      SELECT
+        requested_players.player_id,
+        latest.rating,
+        latest.deviation,
+        latest.volatility,
+        latest.matches_played,
+        (
+          SELECT COUNT(*)::int
+          FROM rating_periods AS inactive_period
+          WHERE inactive_period.status = 'completed'
+            AND (inactive_period.starts_at, inactive_period.id)
+              > (latest.period_starts_at, latest.period_id)
+            AND (inactive_period.starts_at, inactive_period.id) < ($2, $3)
+        ) AS inactive_periods
+      FROM requested_players
+      INNER JOIN players ON players.startgg_player_id = requested_players.player_id
+      INNER JOIN LATERAL (
+        SELECT available_snapshots.*
+        FROM available_snapshots
+        WHERE available_snapshots.player_id = players.id
+          AND (available_snapshots.period_starts_at, available_snapshots.period_id) < ($2, $3)
+        ORDER BY available_snapshots.period_starts_at DESC, available_snapshots.period_id DESC
+        LIMIT 1
+      ) AS latest ON TRUE
     `,
-    [startsAt]
+    [playerIds, period.starts_at, period.id]
   );
 
   return result.rows.map((row): PlayerRating => ({
     playerId: row.player_id,
     rating: Number(row.rating),
-    deviation: Number(row.deviation),
+    deviation: inflateRatingDeviation(
+      Number(row.deviation),
+      Number(row.volatility),
+      Number(row.inactive_periods)
+    ),
     volatility: Number(row.volatility),
     matchesPlayed: Number(row.matches_played),
   }));
@@ -115,6 +175,7 @@ function addPeriodMatchCounts(
 async function persistSnapshots(
   client: PoolClient,
   ratingPeriodId: string,
+  calculationId: string,
   ratings: PersistedRating[]
 ) {
   const serializedRatings = ratings.map((rating) => ({
@@ -128,9 +189,10 @@ async function persistSnapshots(
 
   await client.query(
     `
-      INSERT INTO rating_snapshots (
+      INSERT INTO rating_checkpoints (
         rating_period_id,
         player_id,
+        calculation_id,
         rating,
         deviation,
         volatility,
@@ -140,12 +202,13 @@ async function persistSnapshots(
       SELECT
         $1,
         players.id,
+        $2,
         updates.rating,
         updates.deviation,
         updates.volatility,
         updates.matches_played,
         updates.period_matches
-      FROM jsonb_to_recordset($2::jsonb) AS updates(
+      FROM jsonb_to_recordset($3::jsonb) AS updates(
         player_id TEXT,
         rating DOUBLE PRECISION,
         deviation DOUBLE PRECISION,
@@ -154,23 +217,18 @@ async function persistSnapshots(
         period_matches INTEGER
       )
       INNER JOIN players ON players.startgg_player_id = updates.player_id
-      ON CONFLICT (rating_period_id, player_id) DO UPDATE SET
-        rating = EXCLUDED.rating,
-        deviation = EXCLUDED.deviation,
-        volatility = EXCLUDED.volatility,
-        matches_played = EXCLUDED.matches_played,
-        period_matches = EXCLUDED.period_matches,
-        created_at = NOW()
+      ON CONFLICT (rating_period_id, player_id, calculation_id) DO NOTHING
     `,
-    [ratingPeriodId, JSON.stringify(serializedRatings)]
+    [ratingPeriodId, calculationId, JSON.stringify(serializedRatings)]
   );
 }
 
-export async function processNextRatingPeriod(pool: Pool): Promise<ProcessedRatingPeriod | null> {
-  const client = await pool.connect();
+async function processPeriod(client: PoolClient): Promise<ProcessedRatingPeriod | null> {
+  const startedAt = performance.now();
 
   try {
     await client.query('BEGIN');
+    await lockRatingData(client);
 
     const period = await loadNextPendingPeriod(client);
     if (!period) {
@@ -178,45 +236,98 @@ export async function processNextRatingPeriod(pool: Pool): Promise<ProcessedRati
       return null;
     }
 
-    const [currentRatings, matches] = await Promise.all([
-      loadRatingsBeforePeriod(client, period.starts_at),
-      loadPeriodMatches(client, period.id),
-    ]);
+    const matches = await loadPeriodMatches(client, period.id);
+    const activePlayerIds = [
+      ...new Set(matches.flatMap((match) => [match.winnerPlayerId, match.loserPlayerId])),
+    ];
+    const currentRatings = await loadRatingsBeforePeriod(client, period, activePlayerIds);
+    const loadedAt = performance.now();
     const updatedRatings = addPeriodMatchCounts(
       calculateRatingPeriod(currentRatings, matches),
       matches
     );
+    const calculatedAt = performance.now();
 
-    await persistSnapshots(client, period.id, updatedRatings);
+    const calculationId = randomUUID();
+    await persistSnapshots(client, period.id, calculationId, updatedRatings);
     await client.query(
       `
         UPDATE rating_periods
-        SET status = 'completed', calculated_at = NOW()
+        SET status = 'completed',
+            calculated_at = NOW(),
+            snapshot_mode = 'sparse',
+            calculation_id = $2
         WHERE id = $1
       `,
-      [period.id]
+      [period.id, calculationId]
     );
     await client.query('COMMIT');
+
+    const finishedAt = performance.now();
 
     return {
       externalKey: period.external_key,
       playerCount: updatedRatings.length,
       setCount: matches.length,
+      timings: {
+        loadMs: Math.round(loadedAt - startedAt),
+        calculateMs: Math.round(calculatedAt - loadedAt),
+        persistMs: Math.round(finishedAt - calculatedAt),
+        totalMs: Math.round(finishedAt - startedAt),
+      },
     };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
-  } finally {
-    client.release();
   }
 }
 
-export async function processPendingRatingPeriods(pool: Pool) {
-  const processedPeriods: ProcessedRatingPeriod[] = [];
+export async function processNextRatingPeriod(pool: Pool): Promise<ProcessedRatingPeriod | null> {
+  return (await processPendingRatingPeriods(pool, { maxPeriods: 1 }))[0] ?? null;
+}
 
-  while (true) {
-    const processedPeriod = await processNextRatingPeriod(pool);
-    if (!processedPeriod) return processedPeriods;
-    processedPeriods.push(processedPeriod);
+export async function processPendingRatingPeriods(
+  pool: Pool,
+  options: RatingProcessingOptions = {}
+) {
+  if (
+    options.maxPeriods !== undefined &&
+    (!Number.isInteger(options.maxPeriods) || options.maxPeriods < 1)
+  ) {
+    throw new Error('`maxPeriods` debe ser un entero positivo.');
+  }
+  const processedPeriods: ProcessedRatingPeriod[] = [];
+  const client = await pool.connect();
+  let locked = false;
+  let discardConnection = false;
+
+  try {
+    const lock = await client.query<{ acquired: boolean }>(
+      'SELECT pg_try_advisory_lock($1, $2) AS acquired',
+      [RATING_LOCK_NAMESPACE, RATING_WORKER_LOCK]
+    );
+    locked = lock.rows[0]?.acquired === true;
+    if (!locked) throw new Error('Ya hay un procesador Glicko-2 activo.');
+
+    while (options.maxPeriods === undefined || processedPeriods.length < options.maxPeriods) {
+      const processedPeriod = await processPeriod(client);
+      if (!processedPeriod) break;
+      processedPeriods.push(processedPeriod);
+      options.onPeriod?.(processedPeriod);
+    }
+    return processedPeriods;
+  } finally {
+    try {
+      if (locked) {
+        await client.query('SELECT pg_advisory_unlock($1, $2)', [
+          RATING_LOCK_NAMESPACE,
+          RATING_WORKER_LOCK,
+        ]);
+      }
+    } catch {
+      discardConnection = true;
+    } finally {
+      client.release(discardConnection);
+    }
   }
 }

@@ -8,7 +8,7 @@ describe('createPlayerAnalyticsHandler', () => {
       getYearStats: vi
         .fn()
         .mockResolvedValue([
-          { year: 2024, tournaments: 8, wins: 21, averageScore: 1542, bestScore: 1601 },
+          { year: 2024, tournaments: 8, wins: 21, setsPlayed: 30, averageScore: 1542, bestScore: 1601 },
         ]),
     };
     const response = {

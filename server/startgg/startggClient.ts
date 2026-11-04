@@ -1,3 +1,5 @@
+import type { RequestRateLimiter } from './postgresRateLimiter.ts';
+
 const STARTGG_API_URL = 'https://api.start.gg/gql/alpha';
 const DEFAULT_MINIMUM_REQUEST_INTERVAL_MS = 800;
 const DEFAULT_MAX_RETRIES = 3;
@@ -14,6 +16,7 @@ export interface StartggClientOptions {
   fetcher?: Fetcher;
   minimumRequestIntervalMs?: number;
   maxRetries?: number;
+  rateLimiter?: RequestRateLimiter;
 }
 
 function sleep(durationMs: number) {
@@ -37,7 +40,9 @@ export class StartggClient {
   private readonly fetcher: Fetcher;
   private readonly minimumRequestIntervalMs: number;
   private readonly maxRetries: number;
-  private lastRequestAt = 0;
+  private readonly rateLimiter?: RequestRateLimiter;
+  private nextRequestAt = 0;
+  private requestGate: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly apiKey: string,
@@ -51,15 +56,12 @@ export class StartggClient {
     this.minimumRequestIntervalMs =
       options.minimumRequestIntervalMs ?? DEFAULT_MINIMUM_REQUEST_INTERVAL_MS;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.rateLimiter = options.rateLimiter;
   }
 
   async request<TData>(query: string, variables: Record<string, unknown>) {
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
-      const elapsedMs = Date.now() - this.lastRequestAt;
-      const waitMs = this.minimumRequestIntervalMs - elapsedMs;
-      if (waitMs > 0) await sleep(waitMs);
-
-      this.lastRequestAt = Date.now();
+      await this.reserveRequestSlot();
       const response = await this.fetcher(STARTGG_API_URL, {
         method: 'POST',
         headers: {
@@ -93,5 +95,24 @@ export class StartggClient {
     }
 
     throw new Error('Start.gg agotó los reintentos permitidos.');
+  }
+
+  private async reserveRequestSlot() {
+    if (this.rateLimiter) {
+      await this.rateLimiter.reserve();
+      return;
+    }
+
+    let release!: () => void;
+    const previous = this.requestGate;
+    this.requestGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+
+    const waitMs = Math.max(0, this.nextRequestAt - Date.now());
+    if (waitMs > 0) await sleep(waitMs);
+    this.nextRequestAt = Date.now() + this.minimumRequestIntervalMs;
+    release();
   }
 }

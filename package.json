@@ -15,6 +15,7 @@
     "history:import-player": "node --experimental-transform-types server/cli/importPlayerHistory.ts",
     "tournaments:import-tiers": "node --experimental-transform-types server/cli/importTournamentTiers.ts",
     "ratings:rebuild": "node --experimental-transform-types server/cli/rebuildRatings.ts",
+    "ratings:process": "node --experimental-transform-types server/cli/processRatings.ts",
     "characters:backfill": "node --experimental-transform-types server/cli/backfillCharacterStats.ts",
     "test": "vitest run",
     "preview": "vite preview"

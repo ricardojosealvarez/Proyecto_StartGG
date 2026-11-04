@@ -18,18 +18,52 @@ export interface HistoryImportRepository {
     changed: boolean;
     setsSaved: number;
   }>;
+  loadImportProgress?(scopeKey: string): Promise<HistoryImportProgress | null>;
+  saveImportProgress?(scopeKey: string, progress: HistoryImportProgress): Promise<void>;
+}
+
+export interface HistoryImportProgress {
+  page: number;
+  tournamentIndex: number;
+  status: 'running' | 'completed';
 }
 
 export interface HistoryImportOptions {
   from: Date;
   to: Date;
   maxTournaments?: number;
+  refresh?: boolean;
 }
 
 export interface HistoryImportSummary {
   tournamentsSeen: number;
   tournamentsSaved: number;
   setsSaved: number;
+  completed?: boolean;
+}
+
+const TOURNAMENT_CONCURRENCY = 3;
+
+async function mapWithConcurrency<T, TResult>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<TResult>
+): Promise<TResult[]> {
+  const results: TResult[] = [];
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= values.length) return;
+      results[index] = await mapper(values[index]);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, () => worker())
+  );
+  return results;
 }
 
 function assertValidOptions(options: HistoryImportOptions) {
@@ -100,6 +134,7 @@ export async function importTournamentSummaries(
     tournamentsSeen: 0,
     tournamentsSaved: 0,
     setsSaved: 0,
+    completed: false,
   };
 
   for (const tournament of tournaments) {
@@ -116,7 +151,7 @@ export async function importTournamentSummaries(
     summary.setsSaved += saved.setsSaved;
   }
 
-  return summary;
+  return { ...summary, completed: true };
 }
 
 export async function importUltimateHistory(
@@ -130,32 +165,66 @@ export async function importUltimateHistory(
     tournamentsSeen: 0,
     tournamentsSaved: 0,
     setsSaved: 0,
+    completed: false,
   };
   const afterDate = Math.floor(options.from.getTime() / 1000);
   const beforeDate = Math.floor(options.to.getTime() / 1000);
-  let page = 1;
+  const scopeKey = `ultimate:${afterDate}:${beforeDate}`;
+  const savedProgress = options.refresh
+    ? null
+    : await repository.loadImportProgress?.(scopeKey);
+  if (savedProgress?.status === 'completed') return { ...summary, completed: true };
+  let page = savedProgress?.page ?? 1;
+  let tournamentIndex = savedProgress?.tournamentIndex ?? 0;
   let totalPages = 1;
 
   while (page <= totalPages) {
     const result = await source.getTournamentPage(page, afterDate, beforeDate);
     totalPages = result.totalPages;
 
-    for (const tournament of result.tournaments) {
+    const remainingLimit =
+      options.maxTournaments === undefined
+        ? undefined
+        : options.maxTournaments - summary.tournamentsSeen;
+    const pageTournaments = result.tournaments.slice(
+      tournamentIndex,
+      remainingLimit === undefined ? undefined : tournamentIndex + remainingLimit
+    );
+
+    for (let offset = 0; offset < pageTournaments.length; offset += TOURNAMENT_CONCURRENCY) {
+      const batch = pageTournaments.slice(offset, offset + TOURNAMENT_CONCURRENCY);
+      const imported = await mapWithConcurrency(batch, TOURNAMENT_CONCURRENCY, (tournament) =>
+        importTournamentSummaries(source, repository, [tournament])
+      );
+      for (const tournamentSummary of imported) {
+        summary.tournamentsSeen += tournamentSummary.tournamentsSeen;
+        summary.tournamentsSaved += tournamentSummary.tournamentsSaved;
+        summary.setsSaved += tournamentSummary.setsSaved;
+      }
+      tournamentIndex += batch.length;
+      const pageCompleted = tournamentIndex >= result.tournaments.length;
+      await repository.saveImportProgress?.(scopeKey, {
+        page: pageCompleted ? page + 1 : page,
+        tournamentIndex: pageCompleted ? 0 : tournamentIndex,
+        status: 'running',
+      });
       if (
         options.maxTournaments !== undefined &&
         summary.tournamentsSeen >= options.maxTournaments
       ) {
         return summary;
       }
-
-      const imported = await importTournamentSummaries(source, repository, [tournament]);
-      summary.tournamentsSeen += imported.tournamentsSeen;
-      summary.tournamentsSaved += imported.tournamentsSaved;
-      summary.setsSaved += imported.setsSaved;
     }
 
     page += 1;
+    tournamentIndex = 0;
   }
 
-  return summary;
+  await repository.saveImportProgress?.(scopeKey, {
+    page: Math.max(1, totalPages),
+    tournamentIndex: 0,
+    status: 'completed',
+  });
+
+  return { ...summary, completed: true };
 }

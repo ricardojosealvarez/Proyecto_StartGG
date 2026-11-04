@@ -44,12 +44,17 @@ export function createPlayerAnalyticsHandler(repository: PlayerAnalyticsReposito
     }
 
     try {
+      const years = await repository.getYearStats(
+        playerId,
+        videogameId,
+        tournamentMode as 'all' | 'online' | 'offline'
+      );
       sendJson(response, 200, {
-        years: await repository.getYearStats(
-          playerId,
-          videogameId,
-          tournamentMode as 'all' | 'online' | 'offline'
-        ),
+        years,
+        summary: {
+          tournaments: years.reduce((total, entry) => total + entry.tournaments, 0),
+          setWins: years.reduce((total, entry) => total + entry.wins, 0),
+        },
         source: 'database',
       });
     } catch (error) {

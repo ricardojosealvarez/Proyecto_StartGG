@@ -1,8 +1,10 @@
 import { Pool } from 'pg';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { HistoryImportRepository } from './historyImporter.ts';
+import type { HistoryImportProgress } from './historyImporter.ts';
 import { ULTIMATE_VIDEOGAME_ID } from './historyTypes.ts';
 import type { ImportedPlayer, ImportedSet, ImportedTournament } from './historyTypes.ts';
+import { lockRatingData } from '../ratings/ratingLocks.ts';
 
 interface IdRow extends QueryResultRow {
   id: string;
@@ -320,11 +322,49 @@ async function invalidateRatings(client: PoolClient, startsAt: Date) {
 export class PostgresHistoryRepository implements HistoryImportRepository {
   constructor(private readonly pool: Pool) {}
 
+  async loadImportProgress(scopeKey: string) {
+    const result = await this.pool.query<{
+      tournament_page: number;
+      tournament_index: number;
+      status: HistoryImportProgress['status'];
+    }>(
+      `
+        SELECT tournament_page, tournament_index, status
+        FROM history_import_progress
+        WHERE scope_key = $1
+      `,
+      [scopeKey]
+    );
+    const row = result.rows[0];
+    return row
+      ? { page: row.tournament_page, tournamentIndex: row.tournament_index, status: row.status }
+      : null;
+  }
+
+  async saveImportProgress(scopeKey: string, progress: HistoryImportProgress) {
+    await this.pool.query(
+      `
+        INSERT INTO history_import_progress (
+          scope_key, tournament_page, tournament_index, status, completed_at
+        )
+        VALUES ($1, $2, $3, $4, CASE WHEN $4 = 'completed' THEN NOW() ELSE NULL END)
+        ON CONFLICT (scope_key) DO UPDATE SET
+          tournament_page = EXCLUDED.tournament_page,
+          tournament_index = EXCLUDED.tournament_index,
+          status = EXCLUDED.status,
+          updated_at = NOW(),
+          completed_at = EXCLUDED.completed_at
+      `,
+      [scopeKey, progress.page, progress.tournamentIndex, progress.status]
+    );
+  }
+
   async saveTournament(tournament: ImportedTournament) {
     const client = await this.pool.connect();
 
     try {
       await client.query('BEGIN');
+      await lockRatingData(client);
 
       const sets = uniqueSets(tournament.events.flatMap((event) => event.sets));
       const tournamentId = await upsertTournament(client, tournament);

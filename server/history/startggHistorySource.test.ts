@@ -4,73 +4,74 @@ import { StartggHistorySource } from './startggHistorySource.ts';
 
 describe('StartggHistorySource.getPlayerTournamentPage', () => {
   it('deduplica eventos de Ultimate y normaliza el país', async () => {
-    const client = new StartggClient('token', {
-      minimumRequestIntervalMs: 0,
-      fetcher: vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            data: {
-              player: {
-                sets: {
-                  pageInfo: { totalPages: 2 },
-                  nodes: [
-                    {
-                      event: {
-                        id: 10,
-                        name: 'Ultimate Singles',
-                        numEntrants: 64,
-                        videogame: { id: 1386 },
-                        tournament: {
-                          id: 20,
-                          name: 'Tournament',
-                          slug: 'tournament/test',
-                          countryCode: 'es',
-                          isOnline: true,
-                          startAt: 1_700_000_000,
-                          endAt: 1_700_003_600,
-                        },
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            player: {
+              sets: {
+                pageInfo: { totalPages: 2 },
+                nodes: [
+                  {
+                    event: {
+                      id: 10,
+                      name: 'Ultimate Singles',
+                      numEntrants: 64,
+                      videogame: { id: 1386 },
+                      tournament: {
+                        id: 20,
+                        name: 'Tournament',
+                        slug: 'tournament/test',
+                        countryCode: 'es',
+                        isOnline: true,
+                        startAt: 1_700_000_000,
+                        endAt: 1_700_003_600,
                       },
                     },
-                    {
-                      event: {
-                        id: 10,
-                        name: 'Ultimate Singles',
-                        numEntrants: 64,
-                        videogame: { id: 1386 },
-                        tournament: {
-                          id: 20,
-                          name: 'Tournament',
-                          slug: 'tournament/test',
-                          countryCode: 'es',
-                          isOnline: true,
-                          startAt: 1_700_000_000,
-                          endAt: 1_700_003_600,
-                        },
+                  },
+                  {
+                    event: {
+                      id: 10,
+                      name: 'Ultimate Singles',
+                      numEntrants: 64,
+                      videogame: { id: 1386 },
+                      tournament: {
+                        id: 20,
+                        name: 'Tournament',
+                        slug: 'tournament/test',
+                        countryCode: 'es',
+                        isOnline: true,
+                        startAt: 1_700_000_000,
+                        endAt: 1_700_003_600,
                       },
                     },
-                    {
-                      event: {
-                        id: 30,
-                        name: 'Melee Singles',
-                        videogame: { id: 1 },
-                        tournament: {
-                          id: 20,
-                          name: 'Tournament',
-                          slug: 'tournament/test',
-                          countryCode: 'es',
-                          isOnline: true,
-                          startAt: 1_700_000_000,
-                        },
+                  },
+                  {
+                    event: {
+                      id: 30,
+                      name: 'Melee Singles',
+                      videogame: { id: 1 },
+                      tournament: {
+                        id: 20,
+                        name: 'Tournament',
+                        slug: 'tournament/test',
+                        countryCode: 'es',
+                        isOnline: true,
+                        startAt: 1_700_000_000,
                       },
                     },
-                  ],
-                },
+                  },
+                ],
               },
             },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-      ),
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const client = new StartggClient('token', {
+      minimumRequestIntervalMs: 0,
+      fetcher,
     });
 
     await expect(
@@ -90,5 +91,25 @@ describe('StartggHistorySource.getPlayerTournamentPage', () => {
         },
       ],
     });
+
+    const request = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(request.variables.perPage).toBe(100);
+  });
+
+  it('solicita 80 sets por página de evento', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: { event: { sets: { pageInfo: { totalPages: 1 }, nodes: [] } } },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const client = new StartggClient('token', { minimumRequestIntervalMs: 0, fetcher });
+
+    await new StartggHistorySource(client).getSetPage('event-1', 1);
+
+    const request = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+    expect(request.variables.perPage).toBe(80);
   });
 });

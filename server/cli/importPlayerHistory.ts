@@ -6,8 +6,8 @@ import { parsePlayerImportOptions } from './playerImportOptions.ts';
 import { importPlayerHistory } from '../history/playerHistoryImporter.ts';
 import { PostgresHistoryRepository } from '../history/postgresHistoryRepository.ts';
 import { StartggHistorySource } from '../history/startggHistorySource.ts';
-import { processPendingRatingPeriods } from '../ratings/ratingPeriodProcessor.ts';
 import { StartggClient } from '../startgg/startggClient.ts';
+import { PostgresStartggRateLimiter } from '../startgg/postgresRateLimiter.ts';
 
 function loadProjectEnvironment() {
   for (const filename of ['.env', '.env.local']) {
@@ -28,10 +28,13 @@ async function main() {
   const pool = new Pool({ connectionString: databaseUrl });
 
   try {
-    const source = new StartggHistorySource(new StartggClient(apiKey));
+    const source = new StartggHistorySource(
+      new StartggClient(apiKey, {
+        rateLimiter: new PostgresStartggRateLimiter(pool, apiKey),
+      })
+    );
     const repository = new PostgresHistoryRepository(pool);
     const importSummary = await importPlayerHistory(source, repository, options);
-    const processedPeriods = await processPendingRatingPeriods(pool);
 
     console.log(
       JSON.stringify(
@@ -40,7 +43,7 @@ async function main() {
           interval: { from: options.from.toISOString(), to: options.to.toISOString() },
           regions: options.regions,
           ...importSummary,
-          ratingPeriodsProcessed: processedPeriods.length,
+          ratingPeriodsProcessed: 0,
         },
         null,
         2

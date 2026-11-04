@@ -6,6 +6,7 @@ import { CHARACTER_LOOKBACK_MONTHS } from '../characters/characterStats.ts';
 import { PlayerCharacterService } from '../characters/playerCharacterService.ts';
 import { PostgresCharacterStatsRepository } from '../db/characterStatsRepository.ts';
 import { StartggClient } from '../startgg/startggClient.ts';
+import { PostgresStartggRateLimiter } from '../startgg/postgresRateLimiter.ts';
 import {
   isCharacterBackfillRateLimit,
   parseCharacterBackfillOptions,
@@ -42,6 +43,7 @@ async function main() {
       new StartggClient(apiKey, {
         minimumRequestIntervalMs: REQUEST_INTERVAL_MS,
         maxRetries: 0,
+        rateLimiter: new PostgresStartggRateLimiter(pool, apiKey),
       }),
       undefined,
       undefined,

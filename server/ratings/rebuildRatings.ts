@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { ULTIMATE_VIDEOGAME_ID } from '../history/historyTypes.ts';
 import { processPendingRatingPeriods } from './ratingPeriodProcessor.ts';
+import { lockRatingData } from './ratingLocks.ts';
 
 interface CountRow extends QueryResultRow {
   count: string;
@@ -60,9 +61,31 @@ async function prepareRatingPeriods(client: PoolClient) {
   `);
 }
 
-async function countRows(pool: Pool, table: 'rating_periods' | 'rating_snapshots') {
-  const condition = table === 'rating_periods' ? " WHERE status = 'completed'" : '';
-  const result = await pool.query<CountRow>(`SELECT COUNT(*) AS count FROM ${table}${condition}`);
+async function countCompletedPeriods(pool: Pool) {
+  const result = await pool.query<CountRow>(
+    "SELECT COUNT(*) AS count FROM rating_periods WHERE status = 'completed'"
+  );
+  return Number(result.rows[0].count);
+}
+
+async function countCurrentSnapshots(pool: Pool) {
+  const result = await pool.query<CountRow>(`
+    SELECT COUNT(*) AS count
+    FROM (
+      SELECT rating_snapshots.player_id
+      FROM rating_snapshots
+      INNER JOIN rating_periods ON rating_periods.id = rating_snapshots.rating_period_id
+      WHERE rating_periods.status = 'completed'
+        AND rating_periods.snapshot_mode = 'dense'
+      UNION ALL
+      SELECT rating_checkpoints.player_id
+      FROM rating_checkpoints
+      INNER JOIN rating_periods ON rating_periods.id = rating_checkpoints.rating_period_id
+        AND rating_periods.calculation_id = rating_checkpoints.calculation_id
+      WHERE rating_periods.status = 'completed'
+        AND rating_periods.snapshot_mode = 'sparse'
+    ) AS current_snapshots
+  `);
   return Number(result.rows[0].count);
 }
 
@@ -71,6 +94,7 @@ export async function rebuildRatings(pool: Pool): Promise<RebuildRatingsSummary>
 
   try {
     await client.query('BEGIN');
+    await lockRatingData(client);
     await prepareRatingPeriods(client);
     await client.query('COMMIT');
   } catch (error) {
@@ -83,8 +107,8 @@ export async function rebuildRatings(pool: Pool): Promise<RebuildRatingsSummary>
   const processedPeriods = await processPendingRatingPeriods(pool);
 
   return {
-    periodsPrepared: await countRows(pool, 'rating_periods'),
+    periodsPrepared: await countCompletedPeriods(pool),
     periodsProcessed: processedPeriods.length,
-    snapshotsCreated: await countRows(pool, 'rating_snapshots'),
+    snapshotsCreated: await countCurrentSnapshots(pool),
   };
 }

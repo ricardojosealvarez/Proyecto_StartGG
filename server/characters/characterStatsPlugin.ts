@@ -2,6 +2,7 @@ import type { Plugin } from 'vite';
 import { Pool } from 'pg';
 import { PostgresCharacterStatsRepository } from '../db/characterStatsRepository.ts';
 import { StartggClient } from '../startgg/startggClient.ts';
+import { PostgresStartggRateLimiter } from '../startgg/postgresRateLimiter.ts';
 import { logger } from '../utils/logger.ts';
 import { PlayerCharacterService } from './playerCharacterService.ts';
 
@@ -11,7 +12,11 @@ export function characterStatsProxy(
 ): Plugin {
   const pool = databaseUrl ? new Pool({ connectionString: databaseUrl }) : null;
   const repository = pool ? new PostgresCharacterStatsRepository(pool) : null;
-  const client = apiKey ? new StartggClient(apiKey) : null;
+  const client = apiKey
+    ? new StartggClient(apiKey, {
+        rateLimiter: pool ? new PostgresStartggRateLimiter(pool, apiKey) : undefined,
+      })
+    : null;
   const service =
     client || repository
       ? new PlayerCharacterService(client, undefined, undefined, repository)

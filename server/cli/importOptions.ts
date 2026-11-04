@@ -2,6 +2,7 @@ export interface ImportCommandOptions {
   from: Date;
   to: Date;
   maxTournaments?: number;
+  refresh: boolean;
 }
 
 const DEFAULT_IMPORT_DAYS = 30;
@@ -30,10 +31,18 @@ export function parseImportOptions(
   const maxValue = readArgument(argumentsList, 'max-tournaments');
   const maxTournaments =
     maxValue === 'all' ? undefined : Number(maxValue ?? DEFAULT_MAX_TOURNAMENTS);
+  const refresh = argumentsList.includes('--refresh');
+  const unknownArgument = argumentsList.find(
+    (argument) =>
+      argument !== '--refresh' &&
+      !['--from=', '--to=', '--max-tournaments='].some((prefix) => argument.startsWith(prefix))
+  );
+
+  if (unknownArgument) throw new Error(`Argumento desconocido: ${unknownArgument}.`);
 
   if (maxTournaments !== undefined && (!Number.isInteger(maxTournaments) || maxTournaments <= 0)) {
     throw new Error('`--max-tournaments` debe ser un entero positivo o `all`.');
   }
 
-  return { from, to, maxTournaments };
+  return { from, to, maxTournaments, refresh };
 }

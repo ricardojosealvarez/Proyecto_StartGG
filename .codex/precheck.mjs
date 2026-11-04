@@ -1,0 +1,14 @@
+import pg from 'pg';
+import fs from 'fs';
+const env = fs.readFileSync('.env.local', 'utf8');
+const u = env.match(/^DATABASE_ADMIN_URL=(.*)$/m)[1].trim();
+const c = new pg.Client({ connectionString: u });
+await c.connect();
+const q = async (label, sql) => { const r = await c.query(sql); console.log(`===${label}===`); console.log(JSON.stringify(r.rows)); };
+await q('progress', `SELECT scope_key, tournament_page, tournament_index, status, updated_at, completed_at FROM history_import_progress ORDER BY updated_at DESC LIMIT 10`);
+await q('locks', `SELECT l.classid,l.objid,l.pid,a.usename,a.application_name,a.client_addr,a.state,a.query FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' ORDER BY l.classid,l.objid,l.pid`);
+await q('sessions', `SELECT pid,usename,application_name,state,query FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND state<>'idle'`);
+await q('ratings', `SELECT status,count(*) FROM rating_periods GROUP BY status ORDER BY status`);
+await q('counts', `SELECT (SELECT count(*) FROM tournaments) AS tournaments,(SELECT count(*) FROM sets) AS sets,(SELECT count(*) FROM rating_periods) AS periods`);
+await q('integrity', `SELECT (SELECT count(*) FROM tournaments WHERE startgg_tournament_id IS NULL) AS tournaments_null_ids,(SELECT count(*) FROM sets WHERE startgg_set_id IS NULL) AS sets_null_ids`);
+await c.end();

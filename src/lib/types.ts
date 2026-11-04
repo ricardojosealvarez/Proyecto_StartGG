@@ -81,12 +81,17 @@ export interface PlayerYearStats {
   year: number;
   tournaments: number;
   wins: number;
+  setsPlayed: number;
   averageScore: number | null;
   bestScore: number | null;
 }
 
 export interface PlayerAnalyticsResponse {
   years: PlayerYearStats[];
+  summary: {
+    tournaments: number;
+    setWins: number;
+  };
   source: 'database';
 }
 

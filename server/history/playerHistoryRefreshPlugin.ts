@@ -5,8 +5,8 @@ import { PostgresHistoryRepository } from './postgresHistoryRepository.ts';
 import { refreshPlayerHistory } from './playerHistoryImporter.ts';
 import type { PlayerHistoryRefreshSummary } from './playerHistoryImporter.ts';
 import { StartggHistorySource } from './startggHistorySource.ts';
-import { processPendingRatingPeriods } from '../ratings/ratingPeriodProcessor.ts';
 import { StartggClient } from '../startgg/startggClient.ts';
+import { PostgresStartggRateLimiter } from '../startgg/postgresRateLimiter.ts';
 import { logger } from '../utils/logger.ts';
 
 const PLAYER_HISTORY_REFRESH_ROUTE = '/api/player-history/refresh';
@@ -68,7 +68,13 @@ export function playerHistoryRefreshProxy(
     string,
     Promise<PlayerHistoryRefreshSummary & { ratingPeriodsProcessed: number }>
   >();
-  const source = apiKey ? new StartggHistorySource(new StartggClient(apiKey)) : null;
+  const source = apiKey
+    ? new StartggHistorySource(
+        new StartggClient(apiKey, {
+          rateLimiter: pool ? new PostgresStartggRateLimiter(pool, apiKey) : undefined,
+        })
+      )
+    : null;
   const repository = pool ? new PostgresHistoryRepository(pool) : null;
   const refresher: PlayerHistoryRefresher | null =
     source && repository && pool
@@ -79,8 +85,7 @@ export function playerHistoryRefreshProxy(
 
             const refresh = (async () => {
               const summary = await refreshPlayerHistory(source, repository, playerId);
-              const processedPeriods = await processPendingRatingPeriods(pool);
-              return { ...summary, ratingPeriodsProcessed: processedPeriods.length };
+              return { ...summary, ratingPeriodsProcessed: 0 };
             })().finally(() => runningRefreshes.delete(playerId));
             runningRefreshes.set(playerId, refresh);
             return refresh;

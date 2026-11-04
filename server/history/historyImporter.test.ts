@@ -65,13 +65,50 @@ describe('importUltimateHistory', () => {
       to: new Date('2023-12-01T00:00:00Z'),
     });
 
-    expect(result).toEqual({ tournamentsSeen: 1, tournamentsSaved: 1, setsSaved: 1 });
+    expect(result).toEqual({ tournamentsSeen: 1, tournamentsSaved: 1, setsSaved: 1, completed: true });
     expect(repository.saveTournament).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'tournament-1',
         events: [expect.objectContaining({ sets: [expect.objectContaining({ id: 'set-1' })] })],
       })
     );
+  });
+
+  it('reanuda el intervalo desde el cursor persistido', async () => {
+    const source = createSource();
+    const repository: HistoryImportRepository = {
+      saveTournament: vi.fn().mockResolvedValue({ changed: true, setsSaved: 1 }),
+      loadImportProgress: vi.fn().mockResolvedValue({
+        page: 1, tournamentIndex: 1, status: 'running',
+      }),
+      saveImportProgress: vi.fn(),
+    };
+    const result = await importUltimateHistory(source, repository, {
+      from: new Date('2023-11-01T00:00:00Z'),
+      to: new Date('2023-12-01T00:00:00Z'),
+    });
+    expect(result.tournamentsSeen).toBe(0);
+    expect(result.completed).toBe(true);
+    expect(repository.saveTournament).not.toHaveBeenCalled();
+    expect(repository.saveImportProgress).toHaveBeenLastCalledWith(
+      expect.stringMatching(/^ultimate:/),
+      expect.objectContaining({ status: 'completed' })
+    );
+  });
+
+  it('omite intervalos ya completados salvo refresco explícito', async () => {
+    const source = createSource();
+    const repository: HistoryImportRepository = {
+      saveTournament: vi.fn(),
+      loadImportProgress: vi.fn().mockResolvedValue({
+        page: 1, tournamentIndex: 0, status: 'completed',
+      }),
+    };
+    await expect(importUltimateHistory(source, repository, {
+      from: new Date('2023-11-01T00:00:00Z'),
+      to: new Date('2023-12-01T00:00:00Z'),
+    })).resolves.toEqual({ tournamentsSeen: 0, tournamentsSaved: 0, setsSaved: 0, completed: true });
+    expect(source.getTournamentPage).not.toHaveBeenCalled();
   });
 
   it('rechaza intervalos invertidos', async () => {
